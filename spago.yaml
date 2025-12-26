@@ -1,0 +1,33 @@
+package:
+  name: psd3-simulation
+  description: Force-directed graph simulation for PureScript D3
+  publish:
+    version: 0.1.0
+    license: MIT
+    location:
+      githubOwner: afcondon
+      githubRepo: purescript-psd3-simulation
+  dependencies:
+    - arrays
+    - console
+    - effect
+    - foldable-traversable
+    - functions
+    - halogen-subscriptions
+    - integers
+    - maybe
+    - newtype
+    - numbers
+    - ordered-collections
+    - partial
+    - prelude
+    - psd3-selection
+    - refs
+    - tuples
+    - unsafe-coerce
+    - web-dom
+  test:
+    main: Test.Main
+    dependencies:
+      - assert
+      - nullable
