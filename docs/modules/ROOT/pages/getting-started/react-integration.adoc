@@ -27,11 +27,11 @@ mkForceGraph = do
 
   component "ForceGraph" \props -> React.do
     -- useSimulation manages the entire lifecycle
-    { simulation, currentNodes, isRunning } <-
+    { simulation, currentNodes, isRunning, tickCount } <-
       useSimulation mySetup props.nodes props.links
 
-    -- Render when nodes update (including on each tick)
-    useEffect currentNodes do
+    -- Render when tick count changes (not currentNodes - see note below)
+    useEffect tickCount do
       renderGraph containerId currentNodes
       pure mempty
 
@@ -48,7 +48,10 @@ The hook returns:
 | `currentNodes` | `Array SimNode` - nodes with current positions (updates on tick)
 | `isRunning` | `Boolean` - whether simulation is active
 | `alpha` | `Number` - current alpha value
+| `tickCount` | `Int` - counter incremented each tick (use as `useEffect` dependency)
 |===
+
+IMPORTANT: Use `tickCount` as your `useEffect` dependency, not `currentNodes`. PureScript's `Eq` for arrays compares *contents*, and D3 mutates nodes in place (same object references). This means `eq oldNodes newNodes` returns `true` even when positions change, so `useEffect currentNodes` won't re-run on ticks.
 
 == Setup Configuration
 
@@ -112,11 +115,12 @@ mkForceGraph = do
 
   component "ForceGraph" \props -> React.do
     -- Hook manages simulation lifecycle
-    { currentNodes, isRunning } <-
+    { currentNodes, isRunning, tickCount } <-
       useSimulation forceSetup props.nodes props.links
 
-    -- Render SVG when node positions update
-    useEffect currentNodes do
+    -- Render SVG when tick count changes
+    -- (tickCount is the correct dependency, not currentNodes)
+    useEffect tickCount do
       renderNodes containerId currentNodes
       pure mempty
 
@@ -205,13 +209,14 @@ mkDraggableGraph = do
   containerId <- useContainerId
 
   component "DraggableGraph" \props -> React.do
-    { simulation, currentNodes } <- useSimulation setup props.nodes props.links
+    { simulation, currentNodes, tickCount } <- useSimulation setup props.nodes props.links
 
     -- After rendering, attach drag behavior
-    useEffect currentNodes do
+    useEffect tickCount do
       case simulation of
         Nothing -> pure mempty
         Just sim -> do
+          renderNodes containerId currentNodes  -- First render
           nodeElements <- Sim.querySelectorElements ("#" <> containerId <> " circle")
           Sim.attachDrag nodeElements sim
           pure mempty
