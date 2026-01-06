@@ -1,0 +1,258 @@
+= Halogen Integration
+:description: Integrating PSD3 Simulation with Halogen components
+
+PSD3 Simulation provides first-class Halogen integration through the subscription pattern. This enables the "framework-first" architecture where all state lives in your Halogen component.
+
+== Installation
+
+Halogen integration requires the separate `psd3-simulation-halogen` package:
+
+[source,bash]
+----
+spago install psd3-simulation psd3-simulation-halogen
+----
+
+This keeps Halogen-specific dependencies (`halogen-subscriptions`) out of the core package.
+
+== The Pattern
+
+[source,purescript]
+----
+module MyComponent where
+
+import PSD3.ForceEngine.Simulation as Sim
+import PSD3.ForceEngine.Setup as Setup
+import PSD3.ForceEngine.Events (SimulationEvent(..), defaultCallbacks)
+import PSD3.ForceEngine.Halogen (subscribeToSimulation)
+
+type State =
+  { simulation :: Maybe ForceSimulation
+  , nodes :: Array SimNode
+  , enterProgress :: Map NodeId Progress
+  , exitingNodes :: Array ExitingNode
+  }
+
+data Action
+  = Initialize
+  | SimulationEvent SimulationEvent
+  | DataChanged (Array SimNode) (Array SimLink)
+
+handleAction :: Action -> H.HalogenM State Action () o m Unit
+handleAction = case _ of
+  Initialize -> do
+    -- 1. Create callbacks container
+    callbacks <- liftEffect defaultCallbacks
+
+    -- 2. Create simulation with callbacks
+    sim <- liftEffect $ Sim.createWithCallbacks Sim.defaultConfig callbacks
+
+    -- 3. Subscribe to simulation events
+    emitter <- liftEffect $ subscribeToSimulation sim
+    void $ H.subscribe $ emitter <#> SimulationEvent
+
+    -- 4. Apply initial setup
+    liftEffect $ Setup.applySetup mySetup sim
+    liftEffect $ Sim.setNodes initialNodes sim
+    liftEffect $ Sim.setLinks initialLinks sim
+
+    -- 5. Start simulation
+    liftEffect $ Sim.start sim
+
+    H.modify_ _ { simulation = Just sim }
+
+  SimulationEvent event -> case event of
+    Tick -> do
+      -- Re-render with current positions
+      { simulation, enterProgress, exitingNodes } <- H.get
+      for_ simulation \sim -> do
+        nodes <- liftEffect $ Sim.getNodes sim
+        liftEffect $ renderScene (buildSceneData nodes enterProgress exitingNodes)
+
+        -- Advance transition progress
+        advanceTransitions
+
+    Started ->
+      H.modify_ _ { running = true }
+
+    Stopped ->
+      H.modify_ _ { running = false }
+
+    AlphaDecayed alpha ->
+      when (alpha < 0.1) $ H.modify_ _ { settling = true }
+
+  DataChanged newNodes newLinks -> do
+    { simulation } <- H.get
+    for_ simulation \sim -> do
+      -- Use GUP semantics
+      result <- liftEffect $ Setup.applySetupWithData mySetup newNodes newLinks sim
+
+      -- Track entering nodes
+      let enterProgress = Map.fromFoldable $
+            result.nodes.entered <#> \n -> Tuple n.id 0.0
+
+      -- Track exiting nodes (freeze positions)
+      let exitingNodes = result.nodes.exited <#> \n ->
+            { item: n, progress: 0.0 }
+
+      H.modify_ _
+        { nodes = newNodes
+        , enterProgress = enterProgress
+        , exitingNodes = exitingNodes
+        }
+
+      -- Reheat simulation
+      liftEffect $ Sim.reheat sim
+----
+
+== SimulationEvent Types
+
+[source,purescript]
+----
+data SimulationEvent
+  = Tick                    -- Called every animation frame (~60fps)
+  | Started                 -- Simulation started running
+  | Stopped                 -- Simulation cooled down (alpha < alphaMin)
+  | AlphaDecayed Number     -- Alpha crossed a threshold (0.5, 0.1, 0.01)
+----
+
+== Callbacks Setup
+
+The callbacks are stored in mutable refs that `subscribeToSimulation` wires up:
+
+[source,purescript]
+----
+import PSD3.ForceEngine.Events (defaultCallbacks, SimulationCallbacks)
+
+-- defaultCallbacks creates refs with no-op callbacks
+callbacks <- defaultCallbacks
+
+-- subscribeToSimulation wires them to emit Halogen events
+emitter <- subscribeToSimulation sim
+----
+
+== Typical Component Structure
+
+[source,purescript]
+----
+module App.ForceGraph where
+
+import Prelude
+import Data.Maybe (Maybe(..))
+import Data.Map as Map
+import Effect.Aff.Class (class MonadAff)
+import Halogen as H
+import Halogen.HTML as HH
+import PSD3.ForceEngine.Simulation as Sim
+import PSD3.ForceEngine.Setup as Setup
+import PSD3.ForceEngine.Events (SimulationEvent(..), defaultCallbacks)
+import PSD3.ForceEngine.Halogen (subscribeToSimulation)
+
+type SimNode = Sim.SimulationNode (name :: String, group :: Int)
+type SimLink = { source :: Int, target :: Int }
+type ForceSimulation = Sim.Simulation (name :: String, group :: Int) ()
+
+-- Setup as a value (can be swapped)
+mySetup :: Setup.Setup SimNode
+mySetup = Setup.setup "graph"
+  [ Setup.manyBody "charge" # Setup.withStrength (Setup.static (-100.0))
+  , Setup.link "links" # Setup.withDistance (Setup.static 30.0)
+  , Setup.center "center"
+  , Setup.collide "collision" # Setup.withRadius (Setup.static 5.0)
+  ]
+
+type State =
+  { simulation :: Maybe ForceSimulation
+  , nodes :: Array SimNode
+  , links :: Array SimLink
+  , running :: Boolean
+  }
+
+data Action
+  = Initialize
+  | Finalize
+  | SimEvent SimulationEvent
+
+component :: forall q i o m. MonadAff m => H.Component q i o m
+component = H.mkComponent
+  { initialState: const
+      { simulation: Nothing
+      , nodes: []
+      , links: []
+      , running: false
+      }
+  , render
+  , eval: H.mkEval $ H.defaultEval
+      { handleAction = handleAction
+      , initialize = Just Initialize
+      , finalize = Just Finalize
+      }
+  }
+
+render :: State -> H.ComponentHTML Action () m
+render state =
+  HH.div
+    [ HH.id "graph-container" ]
+    [ HH.svg [ HH.id "graph-svg" ] [] ]
+
+handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action () o m Unit
+handleAction = case _ of
+  Initialize -> do
+    callbacks <- liftEffect defaultCallbacks
+    sim <- liftEffect $ Sim.createWithCallbacks Sim.defaultConfig callbacks
+
+    emitter <- liftEffect $ subscribeToSimulation sim
+    void $ H.subscribe $ emitter <#> SimEvent
+
+    liftEffect $ Setup.applySetup mySetup sim
+    liftEffect $ Sim.setNodes initialNodes sim
+    liftEffect $ Sim.setLinks initialLinks sim
+    liftEffect $ Sim.start sim
+
+    H.modify_ _ { simulation = Just sim, nodes = initialNodes, links = initialLinks }
+
+  Finalize -> do
+    { simulation } <- H.get
+    for_ simulation \sim ->
+      liftEffect $ Sim.stop sim
+
+  SimEvent event -> case event of
+    Tick -> do
+      { simulation } <- H.get
+      for_ simulation \sim -> do
+        nodes <- liftEffect $ Sim.getNodes sim
+        H.modify_ _ { nodes = nodes }
+        -- Render updated positions
+        liftEffect $ renderGraph nodes
+
+    Started -> H.modify_ _ { running = true }
+    Stopped -> H.modify_ _ { running = false }
+    AlphaDecayed _ -> pure unit
+
+-- Initial data
+initialNodes :: Array SimNode
+initialNodes =
+  [ { id: 0, x: 0.0, y: 0.0, vx: 0.0, vy: 0.0, fx: null, fy: null, name: "A", group: 0 }
+  , { id: 1, x: 0.0, y: 0.0, vx: 0.0, vy: 0.0, fx: null, fy: null, name: "B", group: 0 }
+  -- ...
+  ]
+
+initialLinks :: Array SimLink
+initialLinks = [ { source: 0, target: 1 } ]
+----
+
+== Cleanup
+
+Always stop the simulation when the component is destroyed:
+
+[source,purescript]
+----
+handleAction Finalize = do
+  { simulation } <- H.get
+  for_ simulation \sim -> liftEffect $ Sim.stop sim
+----
+
+== Next Steps
+
+* xref:getting-started/react-integration.adoc[React Integration] - If using React
+* xref:how-to/gup-semantics.adoc[GUP Semantics] - Enter/update/exit animations
+* xref:how-to/force-transitions.adoc[Force Transitions] - Switch between configurations

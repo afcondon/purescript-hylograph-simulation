@@ -1,0 +1,151 @@
+= Understanding Forces
+:description: Guide to all force types available in PSD3 Simulation
+
+Forces determine how nodes move in the simulation. Each force has a name (for identification) and configuration options.
+
+== Available Forces
+
+=== ManyBody (Charge)
+
+Simulates electrical charge between nodes. Positive values attract, negative values repel.
+
+[source,purescript]
+----
+FE.addForce (FE.ManyBody "charge" config) sim
+----
+
+[cols="1,1,3"]
+|===
+| Option | Default | Description
+
+| `strength` | `-30.0` | Force strength. Negative = repulsion, positive = attraction
+| `theta` | `0.9` | Barnes-Hut approximation parameter (0-1)
+| `distanceMin` | `1.0` | Minimum distance between nodes
+| `distanceMax` | `Infinity` | Maximum effective distance
+|===
+
+=== Collide
+
+Prevents nodes from overlapping by treating them as circles with a radius.
+
+[source,purescript]
+----
+FE.addForce (FE.Collide "collision" config) sim
+----
+
+[cols="1,1,3"]
+|===
+| Option | Default | Description
+
+| `radius` | `1.0` | Collision radius
+| `strength` | `1.0` | Collision response strength (0-1)
+| `iterations` | `1` | Number of iterations per tick
+|===
+
+=== Link
+
+Pulls connected nodes together (or apart) to achieve a target distance.
+
+[source,purescript]
+----
+FE.addForce (FE.Link "links" config) sim
+FE.setLinks links sim
+----
+
+[cols="1,1,3"]
+|===
+| Option | Default | Description
+
+| `distance` | `30.0` | Target link distance
+| `strength` | `Nothing` | Link strength (auto-calculated if Nothing)
+| `iterations` | `1` | Number of iterations per tick
+|===
+
+=== Center
+
+Keeps the center of mass at a specific position.
+
+[source,purescript]
+----
+FE.addForce (FE.Center "center" config) sim
+----
+
+[cols="1,1,3"]
+|===
+| Option | Default | Description
+
+| `x` | `0.0` | Target X coordinate
+| `y` | `0.0` | Target Y coordinate
+| `strength` | `1.0` | How strongly to enforce centering
+|===
+
+=== ForceX / ForceY
+
+Pushes nodes toward a specific X or Y coordinate.
+
+[source,purescript]
+----
+FE.addForce (FE.ForceX "gravity-x" { x: 200.0, strength: 0.1 }) sim
+FE.addForce (FE.ForceY "gravity-y" { y: 150.0, strength: 0.1 }) sim
+----
+
+=== Radial
+
+Pushes nodes toward a circle at a specific radius from a point.
+
+[source,purescript]
+----
+FE.addForce (FE.Radial "orbit" config) sim
+----
+
+[cols="1,1,3"]
+|===
+| Option | Default | Description
+
+| `radius` | `100.0` | Target radius
+| `x` | `0.0` | Center X
+| `y` | `0.0` | Center Y
+| `strength` | `0.1` | Force strength
+|===
+
+== Combining Forces
+
+Most visualizations use multiple forces together:
+
+[source,purescript]
+----
+-- Standard graph layout
+FE.addForce (FE.ManyBody "charge" $ FE.defaultManyBody { strength = -100.0 }) sim
+FE.addForce (FE.Link "links" $ FE.defaultLink { distance = 80.0 }) sim
+FE.addForce (FE.Center "center" $ FE.defaultCenter { x = 400.0, y = 300.0 }) sim
+FE.addForce (FE.Collide "collision" $ FE.defaultCollide { radius = 20.0 }) sim
+----
+
+== Removing Forces
+
+Forces can be removed by name:
+
+[source,purescript]
+----
+FE.removeForce "charge" sim
+----
+
+== Force Naming
+
+Each force has a unique name. This allows you to:
+
+* Remove specific forces later
+* Update force configurations
+* Debug which forces are active
+
+[source,purescript]
+----
+-- Get the name from any ForceSpec
+let name = FE.forceName (FE.ManyBody "myCharge" config)
+-- name == "myCharge"
+----
+
+== Next Steps
+
+* xref:getting-started/from-d3.adoc[From D3 Force] - Compare with D3's API
+* xref:understanding/force-algorithms.adoc[Force Algorithms] - How forces are calculated

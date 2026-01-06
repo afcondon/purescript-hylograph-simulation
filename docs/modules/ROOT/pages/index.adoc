@@ -1,0 +1,176 @@
+= PSD3 Simulation
+:description: Declarative force simulation for interactive data visualization
+
+A declarative force simulation engine that enables **force layouts as reactive UI**. Unlike D3's imperative approach, PSD3 Simulation integrates with framework state management (Halogen, React) so your visualization modules stay stateless and your simulation responds to data changes with proper enter/update/exit semantics.
+
+== The Vision: Force Layouts as UI
+
+Traditional D3 force simulations are imperative - you mutate state, attach callbacks, and manually synchronize with your UI framework. PSD3 Simulation inverts this:
+
+[source]
+----
+┌─────────────────────────────────────────────────────────────┐
+│                    Framework (Halogen/React)                 │
+│                                                              │
+│   State: { nodes, links, forceConfig, enteringNodes, ... }  │
+│                         │                                    │
+│                         ▼                                    │
+│              ┌─────────────────────┐                        │
+│              │  applySetupWithData │  ◄── Declarative!      │
+│              └─────────────────────┘                        │
+│                         │                                    │
+│                         ▼                                    │
+│   Callbacks: Tick → UpdatePositions, Stop → SettledState    │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Stateless Visualization Module                  │
+│                                                              │
+│   buildSceneData :: Nodes → Links → Progress → SceneData    │
+│   renderScene :: SceneData → Effect Unit                    │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+----
+
+*All state lives in your framework*. Visualization modules are pure functions that render what they're given.
+
+== Key Features
+
+=== Declarative Force Setup
+
+Configure forces with a composable DSL:
+
+[source,purescript]
+----
+import PSD3.ForceEngine.Setup as Setup
+
+mySetup :: Setup.Setup MyNode
+mySetup = Setup.setup "physics"
+  [ Setup.manyBody "charge"
+      # Setup.withStrength (Setup.static (-100.0))
+  , Setup.collide "collision"
+      # Setup.withRadius (Setup.dynamic _.r)  -- Per-node radius!
+  , Setup.link "links"
+      # Setup.withDistance (Setup.static 30.0)
+  , Setup.positionX "gridX"
+      # Setup.withX (Setup.dynamic _.gridX)   -- Per-node target!
+      # Setup.withStrength (Setup.static 0.1)
+  ]
+
+-- Apply to simulation (idempotent - call repeatedly to change config)
+Setup.applySetup mySetup sim
+----
+
+=== General Update Pattern (GUP)
+
+Handle dynamic data with proper enter/update/exit semantics:
+
+[source,purescript]
+----
+-- When your data changes:
+result <- Setup.applySetupWithData mySetup newNodes newLinks sim
+
+-- result.nodes.entered  → Animate these in (e.g., grow from center)
+-- result.nodes.updated  → Simulation state preserved (positions, velocities)
+-- result.nodes.exited   → Animate these out (e.g., fade and remove)
+----
+
+=== Framework Callbacks
+
+Bridge simulation events to your state management:
+
+[source,purescript]
+----
+-- Halogen
+emitter <- subscribeToSimulation sim
+void $ H.subscribe $ emitter <#> \event -> case event of
+  Tick -> UpdateNodePositions
+  Started -> SimulationStarted
+  Stopped -> SimulationSettled
+  AlphaDecayed alpha -> AlphaChanged alpha
+
+-- React (with useSimulation hook)
+{ simulation, nodes } <- useSimulation config callbacks mySetup initialNodes
+----
+
+=== Force Engagement/Disengagement
+
+Switch force configurations on the fly:
+
+[source,purescript]
+----
+-- Grid layout
+let gridSetup = Setup.setup "grid"
+  [ Setup.positionX "x" # Setup.withX (Setup.dynamic _.gridX)
+  , Setup.positionY "y" # Setup.withY (Setup.dynamic _.gridY)
+  ]
+
+-- Force layout
+let forceSetup = Setup.setup "force"
+  [ Setup.manyBody "charge" # Setup.withStrength (Setup.static (-50.0))
+  , Setup.link "links" # Setup.withDistance (Setup.static 30.0)
+  ]
+
+-- Switch between them
+Setup.applySetup gridSetup sim   -- Nodes flow to grid positions
+Setup.applySetup forceSetup sim  -- Nodes respond to forces
+----
+
+== Getting Started
+
+* xref:getting-started/architecture.adoc[Architecture] - Understand the framework-first approach
+* xref:getting-started/setup-dsl.adoc[Setup DSL] - Declarative force configuration
+* xref:getting-started/halogen-integration.adoc[Halogen Integration] - Subscription pattern
+* xref:getting-started/react-integration.adoc[React Integration] - useSimulation hook
+
+== Installation
+
+[source,bash]
+----
+spago install psd3-simulation
+----
+
+=== Framework Integration Packages
+
+The core `psd3-simulation` package is framework-agnostic. For framework integration, add the appropriate adapter package:
+
+[cols="1,2,2"]
+|===
+| Framework | Package | Provides
+
+| Halogen
+| `psd3-simulation-halogen`
+| `subscribeToSimulation` - Halogen subscription emitter
+
+| React
+| `psd3-react`
+| `useSimulation` hook
+|===
+
+[source,bash]
+----
+# For Halogen projects
+spago install psd3-simulation psd3-simulation-halogen
+
+# For React projects
+spago install psd3-simulation psd3-react
+----
+
+This separation keeps framework-specific dependencies out of the core package, so React projects don't pull in Halogen dependencies and vice versa.
+
+== Part of the PSD3 Ecosystem
+
+*Core Libraries:*
+
+* *psd3-tree* - Tree data structures (dependency)
+* *psd3-selection* - D3 selection and rendering
+* *psd3-simulation* - Force simulation (this package)
+* *psd3-layout* - Layout algorithms
+* *psd3-graph* - Graph algorithms
+
+*Framework Adapters:*
+
+* *psd3-simulation-halogen* - Halogen subscription integration
+* *psd3-react* - React hooks integration

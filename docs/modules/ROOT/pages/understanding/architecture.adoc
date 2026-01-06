@@ -1,0 +1,147 @@
+= Architecture
+:description: Internal architecture of PSD3 Simulation
+
+This document explains how PSD3 Simulation is structured and how the components work together.
+
+== Module Overview
+
+[source]
+----
+PSD3.ForceEngine
+├── Types          -- Core data types (SimNode, SimLink, ForceSpec)
+├── Core           -- Low-level force calculations (FFI to D3)
+├── Simulation     -- High-level simulation management
+├── Events         -- Callback system
+├── Links          -- Link manipulation utilities
+├── Halogen        -- Halogen integration
+└── Registry       -- Multi-simulation management
+----
+
+== Data Flow
+
+[source]
+----
+┌─────────────────────────────────────────────────────────────┐
+│                     Your Application                         │
+│                                                              │
+│  nodes ──► setNodes ──► Simulation ──► onTick ──► render    │
+│  links ──► setLinks ──┘      │                               │
+│  forces ─► addForce ─────────┘                               │
+└─────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Simulation Engine                         │
+│                                                              │
+│  For each tick:                                              │
+│    1. Apply each force to nodes                              │
+│    2. Integrate velocities into positions                    │
+│    3. Decay alpha                                            │
+│    4. Call tick callbacks with updated nodes                 │
+│    5. If alpha < alphaMin, stop and call end callbacks       │
+└─────────────────────────────────────────────────────────────┘
+----
+
+== Key Types
+
+=== SimNode
+
+The fundamental unit of simulation. Contains position, velocity, and user data:
+
+[source,purescript]
+----
+type SimNode d =
+  { id :: String           -- Unique identifier
+  , x :: Number            -- Current X position
+  , y :: Number            -- Current Y position
+  , vx :: Number           -- X velocity
+  , vy :: Number           -- Y velocity
+  , fx :: Maybe Number     -- Fixed X (if set, overrides simulation)
+  , fy :: Maybe Number     -- Fixed Y (if set, overrides simulation)
+  , datum :: d             -- Your application data
+  }
+----
+
+=== ForceSpec
+
+Describes a force to apply. Each variant corresponds to a D3 force type:
+
+[source,purescript]
+----
+data ForceSpec
+  = ManyBody String ManyBodyConfig
+  | Collide String CollideConfig
+  | Link String LinkConfig
+  | Center String CenterConfig
+  | ForceX String ForceXConfig
+  | ForceY String ForceYConfig
+  | Radial String RadialConfig
+----
+
+=== Simulation
+
+An opaque handle to a running simulation. Created with `create`:
+
+[source,purescript]
+----
+newtype Simulation d = Simulation (Ref (SimulationState d))
+----
+
+== Force Application
+
+Forces are applied in the order they were added. Each force:
+
+1. Reads current node positions and velocities
+2. Computes velocity adjustments
+3. Writes adjusted velocities back to nodes
+
+After all forces run, positions are updated by integrating velocities:
+
+[source]
+----
+x' = x + vx * velocityDecay
+y' = y + vy * velocityDecay
+----
+
+== Alpha Decay
+
+The simulation "cools down" over time via alpha decay:
+
+[source]
+----
+alpha' = alpha * alphaDecay
+----
+
+When `alpha < alphaMin`, the simulation stops automatically. You can reheat with `reheat`:
+
+[source,purescript]
+----
+FE.reheat sim  -- Sets alpha back to alphaTarget
+----
+
+== FFI Architecture
+
+PSD3 Simulation uses D3's force calculation code via FFI but manages the simulation loop in PureScript:
+
+[source]
+----
+┌─────────────────────┐     ┌─────────────────────┐
+│    PureScript       │     │    JavaScript/D3    │
+│                     │     │                     │
+│  Simulation loop    │────►│  Force calculations │
+│  State management   │◄────│  (manyBody, collide,│
+│  Callbacks          │     │   link, etc.)       │
+│  Registry           │     │                     │
+└─────────────────────┘     └─────────────────────┘
+----
+
+This gives us:
+
+* D3's battle-tested physics algorithms
+* PureScript's type safety and state management
+* Full control over timing and callbacks
+
+== Next Steps
+
+* xref:understanding/simulation-lifecycle.adoc[Simulation Lifecycle] - Detailed lifecycle stages
+* xref:understanding/force-algorithms.adoc[Force Algorithms] - How each force type works

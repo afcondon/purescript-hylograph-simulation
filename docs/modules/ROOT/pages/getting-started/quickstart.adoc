@@ -1,0 +1,138 @@
+= Quickstart
+:description: Create your first force simulation in 10 minutes
+
+This guide walks you through creating a simple force-directed graph visualization.
+
+== Prerequisites
+
+* PureScript development environment
+* Basic familiarity with Effect and the DOM
+
+== Installation
+
+[source,bash]
+----
+spago install psd3-simulation psd3-selection
+----
+
+== Your First Simulation
+
+=== Step 1: Define Your Data
+
+[source,purescript]
+----
+import PSD3.ForceEngine as FE
+
+type MyNode = { id :: String, label :: String }
+
+myNodes :: Array MyNode
+myNodes =
+  [ { id: "a", label: "Node A" }
+  , { id: "b", label: "Node B" }
+  , { id: "c", label: "Node C" }
+  ]
+
+myLinks :: Array { source :: String, target :: String }
+myLinks =
+  [ { source: "a", target: "b" }
+  , { source: "b", target: "c" }
+  , { source: "c", target: "a" }
+  ]
+----
+
+=== Step 2: Create the Simulation
+
+[source,purescript]
+----
+main :: Effect Unit
+main = do
+  -- Create simulation with default configuration
+  sim <- FE.create FE.defaultConfig
+
+  -- Convert your nodes to SimNodes
+  let simNodes = myNodes <#> \n ->
+        { id: n.id
+        , x: 0.0
+        , y: 0.0
+        , vx: 0.0
+        , vy: 0.0
+        , fx: Nothing
+        , fy: Nothing
+        , datum: n
+        }
+
+  FE.setNodes simNodes sim
+----
+
+=== Step 3: Add Forces
+
+[source,purescript]
+----
+  -- Add repulsion between nodes
+  FE.addForce (FE.ManyBody "charge" FE.defaultManyBody) sim
+
+  -- Add centering force
+  FE.addForce (FE.Center "center" FE.defaultCenter) sim
+
+  -- Add link force (pulls connected nodes together)
+  let linkConfig = FE.defaultLink { distance = 100.0 }
+  FE.addForce (FE.Link "links" linkConfig) sim
+  FE.setLinks (FE.swizzleLinks myLinks simNodes) sim
+----
+
+=== Step 4: Render on Each Tick
+
+[source,purescript]
+----
+  FE.onTick renderCallback sim
+  where
+  renderCallback nodes = do
+    -- Use psd3-selection to update node positions
+    -- Or update your framework's state
+    pure unit
+----
+
+=== Step 5: Start the Simulation
+
+[source,purescript]
+----
+  FE.start sim
+----
+
+== Complete Example
+
+[source,purescript]
+----
+module Main where
+
+import Prelude
+import Effect (Effect)
+import Data.Maybe (Maybe(..))
+import PSD3.ForceEngine as FE
+
+main :: Effect Unit
+main = do
+  sim <- FE.create FE.defaultConfig
+
+  let nodes =
+        [ { id: "a", x: 0.0, y: 0.0, vx: 0.0, vy: 0.0
+          , fx: Nothing, fy: Nothing, datum: { label: "A" } }
+        , { id: "b", x: 0.0, y: 0.0, vx: 0.0, vy: 0.0
+          , fx: Nothing, fy: Nothing, datum: { label: "B" } }
+        , { id: "c", x: 0.0, y: 0.0, vx: 0.0, vy: 0.0
+          , fx: Nothing, fy: Nothing, datum: { label: "C" } }
+        ]
+
+  FE.setNodes nodes sim
+  FE.addForce (FE.ManyBody "charge" FE.defaultManyBody) sim
+  FE.addForce (FE.Center "center" FE.defaultCenter) sim
+
+  FE.onTick (\ns -> log $ "Tick: " <> show (length ns) <> " nodes") sim
+  FE.start sim
+----
+
+== Next Steps
+
+* xref:getting-started/force-types.adoc[Understanding Forces] - Learn about all available force types
+* xref:how-to/draggable-nodes.adoc[Draggable Nodes] - Add user interaction
+* xref:how-to/halogen-integration.adoc[Halogen Integration] - Use with Halogen apps

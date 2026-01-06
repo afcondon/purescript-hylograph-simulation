@@ -1,0 +1,205 @@
+= Architecture
+:description: Framework-first architecture for force simulations
+
+PSD3 Simulation is designed around a key insight: **force simulations are UI components**. Like any UI, they should integrate with your framework's state management rather than maintaining their own parallel state.
+
+== The Problem with Traditional D3
+
+D3's force simulation is imperative and stateful:
+
+[source,javascript]
+----
+// D3 approach: simulation owns state
+const simulation = d3.forceSimulation(nodes)
+  .force("charge", d3.forceManyBody())
+  .on("tick", () => {
+    // Nodes are mutated in place
+    // How do we sync with React/Halogen state?
+  });
+
+// Adding nodes? Manually sync everything
+simulation.nodes(newNodes);
+simulation.alpha(1).restart();
+----
+
+This creates synchronization headaches:
+- Two sources of truth (simulation state vs framework state)
+- Manual lifecycle management
+- Hard to animate enter/exit transitions
+
+== The PSD3 Approach: Framework Owns State
+
+[source]
+----
+┌─────────────────────────────────────────────────────────────┐
+│                    YOUR FRAMEWORK                            │
+│                                                              │
+│  State:                                                      │
+│    nodes :: Array SimNode                                    │
+│    links :: Array SimLink                                    │
+│    forceConfig :: Setup                                      │
+│    enteringNodes :: Map NodeId Progress                      │
+│    exitingNodes :: Array TransitioningNode                   │
+│                                                              │
+│  On data change:                                             │
+│    result <- applySetupWithData config nodes links sim       │
+│    -- Framework handles enter/exit animations                │
+│                                                              │
+│  On simulation tick (via callback):                          │
+│    nodes <- getNodes sim                                     │
+│    -- Re-render with new positions                           │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│              STATELESS VISUALIZATION MODULE                  │
+│                                                              │
+│  -- Pure function: compute what to render                    │
+│  buildSceneData :: Nodes → Links → Transitions → SceneData  │
+│                                                              │
+│  -- Effectful: render to DOM                                 │
+│  renderScene :: SceneData → Effect Unit                     │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+----
+
+== Key Principles
+
+=== 1. Simulation is a Managed Resource
+
+The simulation handle is created once and stored in framework state:
+
+[source,purescript]
+----
+-- Halogen: store in component state
+type State =
+  { simulation :: Maybe ForceSimulation
+  , nodes :: Array SimNode
+  , ...
+  }
+
+handleAction Initialize = do
+  callbacks <- liftEffect defaultCallbacks
+  sim <- liftEffect $ createWithCallbacks defaultConfig callbacks
+  H.modify_ _ { simulation = Just sim }
+----
+
+=== 2. Configuration is Declarative
+
+Force configurations are data, not imperative commands:
+
+[source,purescript]
+----
+-- Define configurations as values
+gridConfig :: Setup SimNode
+gridConfig = setup "grid"
+  [ positionX "x" # withX (dynamic _.gridX)
+  , positionY "y" # withY (dynamic _.gridY)
+  ]
+
+forceConfig :: Setup SimNode
+forceConfig = setup "force"
+  [ manyBody "charge" # withStrength (static (-100.0))
+  , link "links" # withDistance (static 30.0)
+  ]
+
+-- Switch by applying different config
+applySetup gridConfig sim   -- or
+applySetup forceConfig sim
+----
+
+=== 3. Data Changes Use GUP Semantics
+
+When nodes/links change, use `applySetupWithData` to get enter/update/exit:
+
+[source,purescript]
+----
+handleAction (DataChanged newNodes newLinks) = do
+  { simulation } <- H.get
+  for_ simulation \sim -> do
+    result <- liftEffect $ applySetupWithData config newNodes newLinks sim
+
+    -- Track entering nodes for animation
+    let enterProgress = Map.fromFoldable $
+          result.nodes.entered <#> \n -> Tuple n.id 0.0
+
+    -- Track exiting nodes (freeze their positions)
+    let exitingNodes = result.nodes.exited <#> \n ->
+          { item: n, progress: 0.0 }
+
+    H.modify_ _
+      { enterProgress = enterProgress
+      , exitingNodes = exitingNodes
+      }
+----
+
+=== 4. Tick Callbacks Drive Rendering
+
+The simulation notifies the framework on each tick:
+
+[source,purescript]
+----
+-- Setup subscription
+emitter <- subscribeToSimulation sim
+void $ H.subscribe $ emitter <#> SimulationEvent
+
+-- Handle events
+handleAction (SimulationEvent event) = case event of
+  Tick -> do
+    -- Get current positions and re-render
+    { simulation } <- H.get
+    for_ simulation \sim -> do
+      nodes <- liftEffect $ getNodes sim
+      liftEffect $ renderScene (buildSceneData nodes ...)
+
+  Stopped ->
+    -- Simulation settled, maybe save final positions
+    H.modify_ _ { settled = true }
+----
+
+== Example: Les Misérables GUP Demo
+
+The `LesMisV3.GUPDemo` module demonstrates this architecture:
+
+[source,purescript]
+----
+-- Module header shows the philosophy:
+-- | HALOGEN-FIRST ARCHITECTURE:
+-- | - All state lives in Halogen (enteringProgress, exitingNodes)
+-- | - This module provides STATELESS functions for visualization
+
+-- Stateless scene builder
+buildSceneData
+  :: Array LesMisNode       -- Current nodes from simulation
+  -> Map String Progress    -- Entering progress map
+  -> Array ExitingNode      -- Exiting nodes with frozen positions
+  -> Array LesMisLink       -- All links
+  -> SceneData
+
+-- Stateless renderer
+renderScene :: SceneData -> Effect Unit
+----
+
+== Benefits
+
+*Single Source of Truth*::
+Framework state is the authority. Simulation is just a physics engine.
+
+*Predictable Updates*::
+Data changes flow through `applySetupWithData`, which returns what entered/exited.
+
+*Framework-Native Animations*::
+Enter/exit animations use your framework's patterns, not D3's.
+
+*Testable*::
+Scene builders are pure functions. Pass in test data, verify output.
+
+*Debuggable*::
+All state is visible in your framework's dev tools.
+
+== Next Steps
+
+* xref:getting-started/setup-dsl.adoc[Setup DSL] - Learn the declarative force configuration
+* xref:getting-started/halogen-integration.adoc[Halogen Integration] - Subscription pattern
+* xref:how-to/gup-semantics.adoc[GUP Semantics] - Enter/update/exit in depth

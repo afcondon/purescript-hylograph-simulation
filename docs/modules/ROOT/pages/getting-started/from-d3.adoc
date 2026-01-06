@@ -1,0 +1,170 @@
+= From D3 Force
+:description: Migrating from D3's forceSimulation to PSD3 Simulation
+
+If you're familiar with D3's force simulation, this guide shows how concepts map to PSD3.
+
+== Key Differences
+
+[cols="1,1"]
+|===
+| D3 | PSD3
+
+| Imperative method chaining | Explicit function calls
+| Hidden timer-based animation | You control the tick loop
+| Mutable node objects | Immutable state, callbacks receive updates
+| Global simulation state | Explicit simulation handle
+|===
+
+== Side-by-Side Comparison
+
+=== Creating a Simulation
+
+.D3
+[source,javascript]
+----
+const simulation = d3.forceSimulation(nodes)
+  .force("charge", d3.forceManyBody())
+  .force("center", d3.forceCenter(width/2, height/2))
+  .force("link", d3.forceLink(links));
+----
+
+.PSD3
+[source,purescript]
+----
+sim <- FE.create FE.defaultConfig
+FE.setNodes nodes sim
+FE.addForce (FE.ManyBody "charge" FE.defaultManyBody) sim
+FE.addForce (FE.Center "center" { x: width/2.0, y: height/2.0, strength: 1.0 }) sim
+FE.addForce (FE.Link "link" FE.defaultLink) sim
+FE.setLinks links sim
+----
+
+=== Handling Ticks
+
+.D3
+[source,javascript]
+----
+simulation.on("tick", () => {
+  // nodes array is mutated in place
+  nodeSelection.attr("cx", d => d.x).attr("cy", d => d.y);
+});
+----
+
+.PSD3
+[source,purescript]
+----
+FE.onTick renderNodes sim
+  where
+  renderNodes updatedNodes = do
+    -- updatedNodes is a fresh array with new positions
+    -- Use psd3-selection or your framework to update DOM
+----
+
+=== Starting and Stopping
+
+.D3
+[source,javascript]
+----
+simulation.alpha(1).restart();  // Start/reheat
+simulation.stop();              // Stop
+----
+
+.PSD3
+[source,purescript]
+----
+FE.start sim      -- Start
+FE.reheat sim     -- Reheat (restart cooling)
+FE.stop sim       -- Stop
+----
+
+=== Force Configuration
+
+.D3
+[source,javascript]
+----
+simulation.force("charge")
+  .strength(-100)
+  .distanceMax(200);
+----
+
+.PSD3
+[source,purescript]
+----
+let config = FE.defaultManyBody
+      { strength = -100.0
+      , distanceMax = 200.0
+      }
+FE.addForce (FE.ManyBody "charge" config) sim
+----
+
+=== Dragging
+
+.D3
+[source,javascript]
+----
+d3.drag()
+  .on("start", dragstarted)
+  .on("drag", dragged)
+  .on("end", dragended);
+----
+
+.PSD3
+[source,purescript]
+----
+FE.attachDrag sim svgElement
+-- Or for group dragging:
+FE.attachGroupDrag sim svgElement
+----
+
+== Benefits of PSD3's Approach
+
+*Predictability*::
+No hidden timers or automatic behavior. You decide when the simulation runs.
+
+*Debugging*::
+Easy to log state at any point. No mutation means you can inspect previous states.
+
+*Testing*::
+Pure functions for force calculations can be unit tested.
+
+*Framework Integration*::
+Works naturally with Halogen, React, or any other framework.
+
+== Common Patterns
+
+=== Running Until Settled
+
+.D3
+[source,javascript]
+----
+simulation.on("end", () => console.log("Settled"));
+----
+
+.PSD3
+[source,purescript]
+----
+let callbacks = FE.defaultCallbacks
+      { onStop = \_ -> log "Settled" }
+FE.setCallbacks callbacks sim
+----
+
+=== Manual Ticking
+
+.D3
+[source,javascript]
+----
+simulation.stop();
+for (let i = 0; i < 300; i++) simulation.tick();
+----
+
+.PSD3
+[source,purescript]
+----
+FE.stop sim
+for_ (1..300) \_ -> FE.tick sim
+----
+
+== Next Steps
+
+* xref:understanding/architecture.adoc[Architecture] - How PSD3 Simulation works internally
+* xref:how-to/halogen-integration.adoc[Halogen Integration] - Use with Halogen

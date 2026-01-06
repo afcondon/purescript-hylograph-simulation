@@ -1,0 +1,239 @@
+= React Integration
+:description: Integrating PSD3 Simulation with React components
+
+PSD3 provides the `useSimulation` hook for React integration, matching the subscription pattern used in Halogen.
+
+== Installation
+
+React integration requires the separate `psd3-react` package:
+
+[source,bash]
+----
+spago install psd3-simulation psd3-react
+----
+
+This keeps React-specific dependencies (`react-basic-hooks`) out of the core package.
+
+== The useSimulation Hook
+
+[source,purescript]
+----
+import PSD3.React.Simulation (useSimulation, UseSimulationResult)
+import PSD3.ForceEngine.Setup as Setup
+
+mkForceGraph :: Component { nodes :: Array SimNode, links :: Array SimLink }
+mkForceGraph = do
+  containerId <- useContainerId
+
+  component "ForceGraph" \props -> React.do
+    -- useSimulation manages the entire lifecycle
+    { simulation, currentNodes, isRunning } <-
+      useSimulation mySetup props.nodes props.links
+
+    -- Render when nodes update (including on each tick)
+    useEffect currentNodes do
+      renderGraph containerId currentNodes
+      pure mempty
+
+    pure $ R.div { id: containerId }
+----
+
+The hook returns:
+
+[cols="1,3"]
+|===
+| Field | Description
+
+| `simulation` | `Maybe Simulation` - the simulation handle
+| `currentNodes` | `Array SimNode` - nodes with current positions (updates on tick)
+| `isRunning` | `Boolean` - whether simulation is active
+| `alpha` | `Number` - current alpha value
+|===
+
+== Setup Configuration
+
+Define your force setup as a value:
+
+[source,purescript]
+----
+import PSD3.ForceEngine.Setup as Setup
+
+mySetup :: Setup.Setup SimNode
+mySetup = Setup.setup "force-graph"
+  [ Setup.manyBody "charge"
+      # Setup.withStrength (Setup.static (-100.0))
+  , Setup.link "links"
+      # Setup.withDistance (Setup.static 30.0)
+  , Setup.center "center"
+  , Setup.collide "collision"
+      # Setup.withRadius (Setup.dynamic _.r)
+  ]
+----
+
+The hook applies this setup and updates it when the setup reference changes.
+
+== Full Example
+
+[source,purescript]
+----
+module MyForceGraph where
+
+import Prelude
+import Data.Maybe (Maybe(..))
+import Data.Nullable as Nullable
+import Effect (Effect)
+import PSD3.React.Hooks (useContainerId)
+import PSD3.React.Simulation (useSimulation)
+import PSD3.ForceEngine.Setup as Setup
+import PSD3.ForceEngine.Simulation (SimulationNode)
+import React.Basic.DOM as R
+import React.Basic.Hooks (Component, component, useEffect)
+import React.Basic.Hooks as React
+
+-- Node type with required simulation fields + your data
+type MyNode = SimulationNode (name :: String, group :: Int)
+
+-- Link type
+type MyLink = { source :: Int, target :: Int }
+
+-- Force configuration
+forceSetup :: Setup.Setup MyNode
+forceSetup = Setup.setup "my-graph"
+  [ Setup.manyBody "charge" # Setup.withStrength (Setup.static (-80.0))
+  , Setup.link "links" # Setup.withDistance (Setup.static 40.0)
+  , Setup.center "center"
+  , Setup.collide "collision" # Setup.withRadius (Setup.static 8.0)
+  ]
+
+-- Component
+mkForceGraph :: Component { nodes :: Array MyNode, links :: Array MyLink }
+mkForceGraph = do
+  containerId <- useContainerId
+
+  component "ForceGraph" \props -> React.do
+    -- Hook manages simulation lifecycle
+    { currentNodes, isRunning } <-
+      useSimulation forceSetup props.nodes props.links
+
+    -- Render SVG when node positions update
+    useEffect currentNodes do
+      renderNodes containerId currentNodes
+      pure mempty
+
+    -- UI
+    pure $ R.div_
+      [ R.div { id: containerId, style: R.css { width: "800px", height: "600px" } }
+      , R.p_ [ R.text $ if isRunning then "Simulating..." else "Settled" ]
+      ]
+
+-- Rendering function (uses psd3-selection or raw D3)
+renderNodes :: String -> Array MyNode -> Effect Unit
+renderNodes containerId nodes = do
+  -- ... render circles at node.x, node.y
+  pure unit
+----
+
+== Custom Callbacks
+
+For more control, use `useSimulationWithCallbacks`:
+
+[source,purescript]
+----
+import PSD3.React.Simulation (useSimulationWithCallbacks, defaultCallbackHandlers)
+
+mkForceGraph = do
+  containerId <- useContainerId
+
+  component "ForceGraph" \props -> React.do
+    status /\ setStatus <- useState "Initializing..."
+
+    let handlers =
+          { onTick: pure unit  -- Called ~60fps
+          , onStart: setStatus \_ -> "Running..."
+          , onStop: setStatus \_ -> "Settled"
+          , onAlphaThreshold: \alpha ->
+              when (alpha < 0.1) $ setStatus \_ -> "Almost settled..."
+          }
+
+    { currentNodes } <-
+      useSimulationWithCallbacks forceSetup props.nodes props.links handlers
+
+    -- ...
+----
+
+== Responding to Prop Changes
+
+The hook automatically handles data changes with GUP semantics:
+
+[source,purescript]
+----
+-- When props.nodes or props.links change:
+-- 1. applySetupWithData is called (enter/update/exit computed)
+-- 2. Simulation is reheated
+-- 3. Tick updates flow through currentNodes state
+----
+
+If you need access to enter/update/exit for animations, access the simulation directly:
+
+[source,purescript]
+----
+{ simulation, currentNodes } <- useSimulation setup nodes links
+
+-- For GUP animations, track previous nodes in separate state
+prevNodes /\ setPrevNodes <- useState nodes
+
+useEffect nodes do
+  case simulation of
+    Nothing -> pure mempty
+    Just sim -> do
+      result <- Setup.applySetupWithData setup nodes links sim
+      -- result.nodes.entered - animate these in
+      -- result.nodes.exited - animate these out
+      setPrevNodes \_ -> nodes
+      pure mempty
+----
+
+== Drag Behavior
+
+Add drag to rendered nodes:
+
+[source,purescript]
+----
+import PSD3.ForceEngine.Simulation as Sim
+
+mkDraggableGraph = do
+  containerId <- useContainerId
+
+  component "DraggableGraph" \props -> React.do
+    { simulation, currentNodes } <- useSimulation setup props.nodes props.links
+
+    -- After rendering, attach drag behavior
+    useEffect currentNodes do
+      case simulation of
+        Nothing -> pure mempty
+        Just sim -> do
+          nodeElements <- Sim.querySelectorElements ("#" <> containerId <> " circle")
+          Sim.attachDrag nodeElements sim
+          pure mempty
+
+    -- ...
+----
+
+== Multiple Simulations
+
+For multiple independent simulations, use the hook multiple times:
+
+[source,purescript]
+----
+component "MultiGraph" \props -> React.do
+  graph1 <- useSimulation setup1 props.nodes1 props.links1
+  graph2 <- useSimulation setup2 props.nodes2 props.links2
+
+  -- Render both...
+----
+
+== Next Steps
+
+* xref:how-to/gup-semantics.adoc[GUP Semantics] - Enter/update/exit animations
+* xref:how-to/force-transitions.adoc[Force Transitions] - Switch configurations
+* xref:how-to/draggable-nodes.adoc[Draggable Nodes] - Interaction patterns

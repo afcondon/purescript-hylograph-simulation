@@ -1,3 +1,14 @@
+workspace:
+  packageSet:
+    registry: 67.0.1
+  extraPackages:
+    psd3-tree:
+      path: ../purescript-psd3-tree
+    psd3-graph:
+      path: ../purescript-psd3-graph
+    psd3-selection:
+      path: ../purescript-psd3-selection
+
 package:
   name: psd3-simulation
   description: Force-directed graph simulation for PureScript D3
@@ -13,7 +24,6 @@ package:
     - effect
     - foldable-traversable
     - functions
-    - halogen-subscriptions
     - integers
     - maybe
     - newtype

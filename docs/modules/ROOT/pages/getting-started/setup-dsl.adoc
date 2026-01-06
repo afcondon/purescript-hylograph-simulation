@@ -1,0 +1,266 @@
+= Setup DSL
+:description: Declarative force configuration with the Setup DSL
+
+The Setup DSL provides a composable, declarative way to configure force simulations. Instead of imperative `addForce` calls, you declare your entire force configuration as a value.
+
+== Basic Structure
+
+[source,purescript]
+----
+import PSD3.ForceEngine.Setup as Setup
+
+mySetup :: Setup.Setup MyNode
+mySetup = Setup.setup "my-simulation"
+  [ Setup.manyBody "charge"
+      # Setup.withStrength (Setup.static (-30.0))
+  , Setup.collide "collision"
+      # Setup.withRadius (Setup.static 5.0)
+  , Setup.link "links"
+      # Setup.withDistance (Setup.static 30.0)
+  ]
+----
+
+The setup has:
+- A name (for debugging/logging)
+- An array of force configurations
+- Optional simulation parameters
+
+== Force Types
+
+=== ManyBody (Charge)
+
+Simulates electrical charge between nodes:
+
+[source,purescript]
+----
+Setup.manyBody "charge"
+  # Setup.withStrength (Setup.static (-100.0))  -- Negative = repel
+  # Setup.withTheta 0.9                          -- Barnes-Hut approximation
+  # Setup.withDistanceMin 1.0
+  # Setup.withDistanceMax 500.0
+----
+
+=== Collide
+
+Prevents node overlap:
+
+[source,purescript]
+----
+Setup.collide "collision"
+  # Setup.withRadius (Setup.static 10.0)
+  # Setup.withStrength (Setup.static 1.0)
+  # Setup.withIterations 3
+----
+
+=== Link
+
+Spring forces between connected nodes:
+
+[source,purescript]
+----
+Setup.link "links"
+  # Setup.withDistance (Setup.static 30.0)
+  # Setup.withStrength (Setup.static 0.5)
+  # Setup.withIterations 1
+----
+
+=== Center
+
+Keeps center of mass at a point:
+
+[source,purescript]
+----
+Setup.center "center"
+  # Setup.withX (Setup.static 0.0)
+  # Setup.withY (Setup.static 0.0)
+  # Setup.withStrength (Setup.static 0.1)
+----
+
+=== PositionX / PositionY
+
+Pulls nodes toward X or Y coordinates:
+
+[source,purescript]
+----
+Setup.positionX "toGridX"
+  # Setup.withX (Setup.dynamic _.gridX)  -- Per-node target
+  # Setup.withStrength (Setup.static 0.1)
+
+Setup.positionY "toGridY"
+  # Setup.withY (Setup.dynamic _.gridY)
+  # Setup.withStrength (Setup.static 0.1)
+----
+
+=== Radial
+
+Pulls nodes toward a circle:
+
+[source,purescript]
+----
+Setup.radial "orbit"
+  # Setup.withRadius (Setup.static 200.0)
+  # Setup.withX (Setup.static 0.0)  -- Center X
+  # Setup.withY (Setup.static 0.0)  -- Center Y
+  # Setup.withStrength (Setup.static 0.1)
+----
+
+== Static vs Dynamic Values
+
+Most force parameters can be static (same for all nodes) or dynamic (computed per-node):
+
+[source,purescript]
+----
+-- Static: all nodes have radius 10
+Setup.collide "collision"
+  # Setup.withRadius (Setup.static 10.0)
+
+-- Dynamic: radius from node data
+Setup.collide "collision"
+  # Setup.withRadius (Setup.dynamic _.radius)
+
+-- Dynamic: computed from node
+Setup.collide "collision"
+  # Setup.withRadius (Setup.dynamic \node -> sqrt node.value * 5.0)
+----
+
+Dynamic values are re-evaluated when forces are initialized.
+
+== Filtered Forces
+
+Apply forces only to matching nodes:
+
+[source,purescript]
+----
+-- Only repel "important" nodes
+Setup.manyBody "importantCharge"
+  # Setup.withStrength (Setup.static (-200.0))
+  # Setup.withFilter (_.important)
+
+-- Radial force only for a specific group
+Setup.radial "groupOrbit"
+  # Setup.withRadius (Setup.static 150.0)
+  # Setup.withFilter (\n -> n.group == 1)
+----
+
+== Applying Setups
+
+=== Basic Apply
+
+[source,purescript]
+----
+-- Apply configuration to simulation
+Setup.applySetup mySetup sim
+----
+
+`applySetup` is *idempotent*:
+- Forces in setup but not simulation → created
+- Forces in simulation but not setup → removed
+- Existing forces → re-initialized with new params
+
+=== Apply with Data (GUP)
+
+When your data changes, use `applySetupWithData`:
+
+[source,purescript]
+----
+result <- Setup.applySetupWithData mySetup newNodes newLinks sim
+
+-- result.nodes.entered  -- Nodes added (for enter animation)
+-- result.nodes.updated  -- Nodes kept (positions preserved)
+-- result.nodes.exited   -- Nodes removed (for exit animation)
+
+-- result.links.entered
+-- result.links.updated
+-- result.links.exited
+----
+
+This handles the General Update Pattern automatically.
+
+== Modifying Setups
+
+Setups are values - transform them:
+
+[source,purescript]
+----
+-- Start with base setup
+baseSetup :: Setup.Setup MyNode
+baseSetup = Setup.setup "base"
+  [ Setup.manyBody "charge" # Setup.withStrength (Setup.static (-30.0))
+  , Setup.collide "collision" # Setup.withRadius (Setup.static 5.0)
+  ]
+
+-- Add a force
+withLinks = baseSetup
+  # Setup.addForce (Setup.link "links" # Setup.withDistance (Setup.static 30.0))
+
+-- Remove a force
+noCharge = baseSetup
+  # Setup.removeForce "charge"
+
+-- Update a force
+strongerCharge = baseSetup
+  # Setup.updateForce (Setup.manyBody "charge" # Setup.withStrength (Setup.static (-100.0)))
+----
+
+== Simulation Parameters
+
+Customize alpha decay and velocity:
+
+[source,purescript]
+----
+mySetup = Setup.setup "physics" forces
+  # Setup.withAlpha 1.0
+  # Setup.withAlphaDecay 0.02    -- Faster cooling
+  # Setup.withAlphaMin 0.001
+  # Setup.withAlphaTarget 0.0
+  # Setup.withVelocityDecay 0.4
+----
+
+== Common Patterns
+
+=== Grid Layout
+
+[source,purescript]
+----
+gridSetup = Setup.setup "grid"
+  [ Setup.positionX "x" # Setup.withX (Setup.dynamic _.gridX) # Setup.withStrength (Setup.static 0.3)
+  , Setup.positionY "y" # Setup.withY (Setup.dynamic _.gridY) # Setup.withStrength (Setup.static 0.3)
+  , Setup.collide "collision" # Setup.withRadius (Setup.dynamic _.r)
+  ]
+----
+
+=== Force-Directed Graph
+
+[source,purescript]
+----
+forceSetup = Setup.setup "force"
+  [ Setup.manyBody "charge" # Setup.withStrength (Setup.static (-100.0))
+  , Setup.link "links" # Setup.withDistance (Setup.static 30.0)
+  , Setup.center "center" # Setup.withStrength (Setup.static 0.05)
+  , Setup.collide "collision" # Setup.withRadius (Setup.dynamic _.r)
+  ]
+----
+
+=== Clustered Layout
+
+[source,purescript]
+----
+clusteredSetup = Setup.setup "clustered"
+  [ Setup.manyBody "charge" # Setup.withStrength (Setup.static (-30.0))
+  , Setup.link "links" # Setup.withDistance (Setup.static 30.0)
+  , Setup.positionX "clusterX" # Setup.withX (Setup.dynamic clusterCenterX) # Setup.withStrength (Setup.static 0.1)
+  , Setup.positionY "clusterY" # Setup.withY (Setup.dynamic clusterCenterY) # Setup.withStrength (Setup.static 0.1)
+  ]
+  where
+  clusterCenterX node = case node.cluster of
+    0 -> -200.0
+    1 -> 0.0
+    _ -> 200.0
+  clusterCenterY node = 0.0
+----
+
+== Next Steps
+
+* xref:getting-started/halogen-integration.adoc[Halogen Integration] - Wire up callbacks
+* xref:how-to/gup-semantics.adoc[GUP Semantics] - Enter/update/exit in depth
+* xref:how-to/force-transitions.adoc[Force Transitions] - Animate between configurations

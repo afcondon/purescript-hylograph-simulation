@@ -27,8 +27,6 @@ module PSD3.ForceEngine
   , module Simulation
     -- * Re-exports from Events
   , module Events
-    -- * Re-exports from Halogen
-  , module Halogen
     -- * Re-exports from Registry
   , module Registry
     -- * Re-exports from Core (low-level)
@@ -36,6 +34,9 @@ module PSD3.ForceEngine
     -- * Re-exports from Links
   , module Links
   ) where
+
+-- Note: Halogen integration is in a separate package: psd3-simulation-halogen
+-- Import PSD3.ForceEngine.Halogen from that package for subscribeToSimulation
 
 import PSD3.ForceEngine.Types
   ( SimNode
@@ -117,10 +118,6 @@ import PSD3.ForceEngine.Links
   , swizzleLinksByIndex
   , filterLinksToSubset
   ) as Links
-
-import PSD3.ForceEngine.Halogen
-  ( subscribeToSimulation
-  ) as Halogen
 
 import PSD3.ForceEngine.Registry
   ( AnySimulation

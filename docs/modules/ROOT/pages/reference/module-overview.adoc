@@ -1,0 +1,233 @@
+= Module Overview
+:description: Reference for all PSD3 Simulation modules
+
+== PSD3.ForceEngine
+
+The main entry point. Re-exports commonly needed functions from submodules.
+
+[source,purescript]
+----
+import PSD3.ForceEngine as FE
+----
+
+== PSD3.ForceEngine.Types
+
+Core data types for simulations.
+
+=== SimNode
+
+[source,purescript]
+----
+type SimNode d =
+  { id :: String
+  , x :: Number
+  , y :: Number
+  , vx :: Number
+  , vy :: Number
+  , fx :: Maybe Number
+  , fy :: Maybe Number
+  , datum :: d
+  }
+----
+
+=== SimLink
+
+[source,purescript]
+----
+type SimLink d =
+  { source :: SimNode d
+  , target :: SimNode d
+  , datum :: { source :: String, target :: String }
+  }
+----
+
+=== ForceSpec
+
+[source,purescript]
+----
+data ForceSpec
+  = ManyBody String ManyBodyConfig
+  | Collide String CollideConfig
+  | Link String LinkConfig
+  | Center String CenterConfig
+  | ForceX String ForceXConfig
+  | ForceY String ForceYConfig
+  | Radial String RadialConfig
+----
+
+=== Force Configurations
+
+[source,purescript]
+----
+type ManyBodyConfig =
+  { strength :: Number
+  , theta :: Number
+  , distanceMin :: Number
+  , distanceMax :: Number
+  }
+
+type CollideConfig =
+  { radius :: Number
+  , strength :: Number
+  , iterations :: Int
+  }
+
+type LinkConfig =
+  { distance :: Number
+  , strength :: Maybe Number
+  , iterations :: Int
+  }
+
+type CenterConfig =
+  { x :: Number
+  , y :: Number
+  , strength :: Number
+  }
+----
+
+== PSD3.ForceEngine.Simulation
+
+High-level simulation management.
+
+=== Creation
+
+[source,purescript]
+----
+create :: forall d. SimConfig -> Effect (Simulation d)
+createWithCallbacks :: forall d. SimConfig -> SimulationCallbacks d -> Effect (Simulation d)
+----
+
+=== Node and Link Management
+
+[source,purescript]
+----
+setNodes :: forall d. Array (SimNode d) -> Simulation d -> Effect Unit
+setLinks :: forall d. Array (SimLink d) -> Simulation d -> Effect Unit
+getNodes :: forall d. Simulation d -> Effect (Array (SimNode d))
+----
+
+=== Force Management
+
+[source,purescript]
+----
+addForce :: forall d. ForceSpec -> Simulation d -> Effect Unit
+removeForce :: forall d. String -> Simulation d -> Effect Unit
+----
+
+=== Lifecycle Control
+
+[source,purescript]
+----
+start :: forall d. Simulation d -> Effect Unit
+stop :: forall d. Simulation d -> Effect Unit
+tick :: forall d. Simulation d -> Effect Unit
+reheat :: forall d. Simulation d -> Effect Unit
+isRunning :: forall d. Simulation d -> Effect Boolean
+getAlpha :: forall d. Simulation d -> Effect Number
+----
+
+=== Callbacks
+
+[source,purescript]
+----
+onTick :: forall d. (Array (SimNode d) -> Effect Unit) -> Simulation d -> Effect Unit
+setCallbacks :: forall d. SimulationCallbacks d -> Simulation d -> Effect Unit
+getCallbacks :: forall d. Simulation d -> Effect (SimulationCallbacks d)
+----
+
+=== Drag Interaction
+
+[source,purescript]
+----
+attachDrag :: forall d. Simulation d -> Element -> Effect Unit
+attachGroupDrag :: forall d. Simulation d -> Element -> Effect Unit
+----
+
+== PSD3.ForceEngine.Events
+
+Event types and callback configuration.
+
+[source,purescript]
+----
+data SimulationEvent d
+  = Tick (Array (SimNode d))
+  | Start
+  | Stop
+  | AlphaDecay Number
+
+type SimulationCallbacks d =
+  { onTick :: Array (SimNode d) -> Effect Unit
+  , onStart :: Effect Unit
+  , onStop :: Effect Unit
+  , onAlphaDecay :: Number -> Effect Unit
+  }
+
+defaultCallbacks :: forall d. SimulationCallbacks d
+----
+
+== PSD3.ForceEngine.Links
+
+Utilities for working with links.
+
+[source,purescript]
+----
+-- Convert raw links (with string IDs) to SimLinks (with node references)
+swizzleLinks :: forall d. Array RawLink -> Array (SimNode d) -> Array (SimLink d)
+
+-- Filter links to only include those between nodes in a subset
+filterLinksToSubset :: forall d. Array (SimLink d) -> Array (SimNode d) -> Array (SimLink d)
+----
+
+== PSD3.ForceEngine.Halogen
+
+Halogen framework integration.
+
+[source,purescript]
+----
+-- Subscribe a Halogen component to simulation events
+subscribeToSimulation :: forall d m. MonadAff m => Simulation d -> H.HalogenM _ _ _ _ m (H.SubscriptionId)
+----
+
+== PSD3.ForceEngine.Registry
+
+Multi-simulation management.
+
+[source,purescript]
+----
+-- Register a simulation with a name
+register :: forall d. String -> Simulation d -> Effect Unit
+
+-- Look up a simulation by name
+lookup :: String -> Effect (Maybe AnySimulation)
+
+-- Stop all registered simulations
+stopAll :: Effect Unit
+
+-- Clear the registry
+clearRegistry :: Effect Unit
+
+-- List all registered simulation names
+listSimulations :: Effect (Array String)
+----
+
+== PSD3.ForceEngine.Core
+
+Low-level force creation and application. Generally you won't need these directly.
+
+[source,purescript]
+----
+-- Create force handles
+createManyBody :: ManyBodyConfig -> Effect ForceHandle
+createCollide :: CollideConfig -> Effect ForceHandle
+createLink :: LinkConfig -> Effect ForceHandle
+createCenter :: CenterConfig -> Effect ForceHandle
+
+-- Apply forces
+applyForce :: forall d. ForceHandle -> Array (SimNode d) -> Effect (Array (SimNode d))
+applyForces :: forall d. Array ForceHandle -> Array (SimNode d) -> Effect (Array (SimNode d))
+
+-- Simulation steps
+integratePositions :: forall d. Number -> Array (SimNode d) -> Array (SimNode d)
+decayAlpha :: Number -> Number -> Number
+simulationTick :: forall d. SimulationState d -> Effect (SimulationState d)
+----
