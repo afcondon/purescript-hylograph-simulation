@@ -9,6 +9,7 @@
 * xref:how-to/force-transitions.adoc[Force Transitions]
 * xref:how-to/draggable-nodes.adoc[Draggable Nodes]
 * xref:how-to/multiple-simulations.adoc[Multiple Simulations]
+* xref:how-to/react-callbacks.adoc[React Callbacks]
 
 .Understanding
 * xref:understanding/framework-first.adoc[Framework-First Design]

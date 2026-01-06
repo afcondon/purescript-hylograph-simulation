@@ -1,0 +1,185 @@
+= React Callbacks from Force Layouts
+:description: Handling click and other events from force layout visualizations in React
+
+When rendering force simulations with custom FFI, you often need to handle user interactions like clicks on nodes. This guide shows how to pass callbacks from React components to JavaScript rendering code.
+
+== The Pattern
+
+The key insight is that PureScript effects are thunks - zero-argument functions. When passing a callback to JavaScript:
+
+1. Define a callback type in PureScript that returns `Effect Unit`
+2. In JavaScript, call the callback and then invoke the returned thunk: `callback(data)()`
+3. Use React state to respond to the callback
+
+== Step 1: Define the Data Type
+
+First, define a record type for the data you want to pass back:
+
+[source,purescript]
+----
+-- | Node info passed to click callback
+type NodeInfo =
+  { id :: Int
+  , group :: Int
+  , groupName :: String
+  , importance :: Number
+  }
+----
+
+== Step 2: Update the FFI Function
+
+Modify your rendering function to accept a callback parameter:
+
+[source,purescript]
+----
+-- | Render with click callback
+foreign import renderWithCallback
+  :: String                    -- Container ID
+  -> Array MyNode              -- Nodes
+  -> Array MyLink              -- Links
+  -> (NodeInfo -> Effect Unit) -- Click callback
+  -> Effect Unit
+----
+
+In JavaScript, wire up the click handler:
+
+[source,javascript]
+----
+export const renderWithCallback = (containerId) => (nodes) => (links) => (onNodeClick) => () => {
+  // ... SVG setup ...
+
+  nodes.forEach(node => {
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    // ... set attributes ...
+
+    // Click handler - call PureScript callback
+    circle.addEventListener("click", () => {
+      const nodeInfo = {
+        id: node.id,
+        group: node.group,
+        groupName: groupNames[node.group],
+        importance: node.importance
+      };
+      // IMPORTANT: callback returns an Effect (thunk), so call it twice
+      onNodeClick(nodeInfo)();
+    });
+
+    nodesGroup.appendChild(circle);
+  });
+};
+----
+
+IMPORTANT: The callback invocation is `onNodeClick(nodeInfo)()` - the first call applies the argument, the second executes the effect.
+
+== Step 3: Add React State
+
+In your component, add state to track the selected item:
+
+[source,purescript]
+----
+component "ForceGraph" \props -> React.do
+  -- State for selected node (Nothing = no selection)
+  selectedNode /\ setSelectedNode <- useState (Nothing :: Maybe NodeInfo)
+
+  -- ... useSimulation hook ...
+
+  -- Click handler
+  let handleNodeClick :: NodeInfo -> Effect Unit
+      handleNodeClick info = setSelectedNode \_ -> Just info
+----
+
+== Step 4: Wire Up the Callback
+
+Pass the handler to your render function:
+
+[source,purescript]
+----
+useEffect tickCount do
+  when (Array.length currentNodes > 0) do
+    renderWithCallback containerId currentNodes links handleNodeClick
+  pure mempty
+----
+
+== Step 5: Display Selection (Modal Example)
+
+Render UI based on the selection state:
+
+[source,purescript]
+----
+pure $ R.div_
+  [ -- Visualization container
+    R.div { id: containerId }
+
+  -- Modal when node selected
+  , case selectedNode of
+      Nothing -> R.text ""
+      Just info -> R.div
+        { style: R.css
+            { position: "fixed"
+            , top: "50%"
+            , left: "50%"
+            , transform: "translate(-50%, -50%)"
+            , padding: "24px"
+            , background: "white"
+            , borderRadius: "12px"
+            , boxShadow: "0 8px 32px rgba(0,0,0,0.3)"
+            , zIndex: "1000"
+            }
+        , children:
+            [ R.h3_ [ R.text $ "Node " <> show info.id ]
+            , R.p_ [ R.text $ "Group: " <> info.groupName ]
+            , R.button
+                { onClick: capture_ $ setSelectedNode \_ -> Nothing
+                , children: [ R.text "Close" ]
+                }
+            ]
+        }
+
+  -- Backdrop
+  , case selectedNode of
+      Nothing -> R.text ""
+      Just _ -> R.div
+        { onClick: capture_ $ setSelectedNode \_ -> Nothing
+        , style: R.css
+            { position: "fixed"
+            , inset: "0"
+            , background: "rgba(0,0,0,0.5)"
+            , zIndex: "999"
+            }
+        }
+  ]
+----
+
+== Complete Example
+
+See `PSD3.React.ForcePlayground` in the `psd3-react` package for a full working example with:
+
+- Procedurally generated network data
+- Force simulation with `useSimulation` hook
+- Click-to-select nodes with modal display
+- Color-coded groups
+
+== Other Event Types
+
+The same pattern works for any DOM event:
+
+[source,javascript]
+----
+// Hover events
+circle.addEventListener("mouseenter", () => onHover(nodeInfo)());
+circle.addEventListener("mouseleave", () => onHoverEnd()());
+
+// Drag events (if not using D3 drag)
+circle.addEventListener("mousedown", (e) => onDragStart({ x: e.clientX, y: e.clientY })());
+
+// Context menu
+circle.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  onContextMenu(nodeInfo)();
+});
+----
+
+== See Also
+
+* xref:getting-started/react-integration.adoc[React Integration] - The `useSimulation` hook
+* xref:how-to/draggable-nodes.adoc[Draggable Nodes] - D3's built-in drag behavior
