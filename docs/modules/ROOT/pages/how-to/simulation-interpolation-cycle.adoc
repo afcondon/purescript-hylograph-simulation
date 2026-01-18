@@ -1,0 +1,219 @@
+= Combining Simulation and Interpolation
+:description: How to run physics simulation, then animate to a new layout, then re-engage simulation - the pattern used in Code Explorer.
+
+The most powerful data visualization storytelling combines physics simulation with controlled interpolation. This pattern enables:
+
+* Let physics find a good initial layout
+* Smoothly animate to a curated view
+* Re-engage physics for continued exploration
+
+This is exactly how Code Explorer works: simulation runs, user triggers a transition, nodes animate to new positions, then simulation resumes.
+
+== The Pattern
+
+[source,text]
+----
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Simulation    │────▶│  Interpolation  │────▶│   Simulation    │
+│   (converge)    │     │   (animate)     │     │   (re-engage)   │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+        │                       │                       │
+   Physics finds          Smooth transition        Physics resumes
+   good positions         to target layout         with new config
+----
+
+== Implementation
+
+[source,purescript]
+----
+module StorytellingViz where
+
+import Prelude
+import Effect (Effect)
+import Effect.Ref as Ref
+
+import PSD3.Simulation
+  ( runSimulation, Engine(..), SimulationEvent(..), subscribe
+  , SimulationHandle
+  )
+import PSD3.Transition.Engine as Trans
+
+type VizState =
+  { simHandle :: SimulationHandle MyNode
+  , phase :: Phase
+  }
+
+data Phase
+  = SimulationRunning
+  | Transitioning
+  | WaitingForInput
+
+-- Step 1: Start with physics simulation
+startVisualization :: Effect VizState
+startVisualization = do
+  { handle, events } <- runSimulation
+    { engine: D3
+    , setup: initialForceSetup
+    , nodes: initialNodes
+    , ...
+    }
+
+  stateRef <- Ref.new { simHandle: handle, phase: SimulationRunning }
+
+  -- Listen for convergence
+  _ <- subscribe events \event -> case event of
+    Completed -> do
+      Ref.modify_ (_ { phase = WaitingForInput }) stateRef
+      log "Simulation converged - ready for transition"
+    _ -> pure unit
+
+  pure { simHandle: handle, phase: SimulationRunning }
+
+-- Step 2: When ready, transition to new layout
+triggerTransition :: VizState -> Array TargetPosition -> Effect Unit
+triggerTransition state targets = do
+  -- Stop the simulation
+  state.simHandle.stop
+
+  -- Capture current positions
+  currentNodes <- state.simHandle.getNodes
+  let startPositions = map (\n -> { x: n.x, y: n.y }) currentNodes
+
+  -- Animate to target positions
+  animatePositions currentNodes startPositions targets do
+    -- Step 3: Re-engage simulation with new configuration
+    reengageSimulation state
+
+-- Interpolation animation
+animatePositions
+  :: Array MyNode
+  -> Array Position
+  -> Array Position
+  -> Effect Unit  -- onComplete callback
+  -> Effect Unit
+animatePositions nodes starts targets onComplete = do
+  coord <- Coord.create
+  progressRef <- Ref.new 0.0
+
+  _ <- Coord.register coord
+    { tick: \deltaMs -> do
+        progress <- Ref.modify (\p -> min 1.0 (p + deltaMs / 600.0)) progressRef
+        let eased = cubicInOut progress
+
+        -- Update node positions
+        for_ (zip3 nodes starts targets) \{ node, start, target } -> do
+          node.x = lerp start.x target.x eased
+          node.y = lerp start.y target.y eased
+
+        renderNodes nodes
+
+        pure $ if progress >= 1.0
+          then Coord.Completed
+          else Coord.StillRunning
+
+    , onComplete: onComplete
+    }
+
+  Coord.start coord
+
+-- Step 3: Re-engage with potentially different forces
+reengageSimulation :: VizState -> Effect Unit
+reengageSimulation state = do
+  -- Update force configuration if needed
+  state.simHandle.updateSetup newForceSetup
+
+  -- Reheat and restart
+  state.simHandle.reheat
+  state.simHandle.start
+
+  log "Simulation re-engaged with new configuration"
+----
+
+== Real-World Example: Code Explorer
+
+Code Explorer uses this pattern for semantic zoom:
+
+1. **Initial state**: Simulation runs with strong charge, nodes spread out
+2. **User clicks node**: Simulation stops, camera zooms to node
+3. **Detail view**: Selected node expands, related nodes animate closer
+4. **User clicks away**: Nodes animate back, simulation re-engages
+
+[source,purescript]
+----
+-- Code Explorer's transition phases
+handleNodeClick :: NodeId -> Effect Unit
+handleNodeClick nodeId = do
+  -- Phase 1: Stop physics
+  simHandle.stop
+  capturedPositions <- simHandle.getNodes
+
+  -- Phase 2: Compute focus layout (selected node centered, others arranged)
+  let focusLayout = computeFocusLayout nodeId capturedPositions
+
+  -- Phase 3: Animate to focus layout
+  animatePositions capturedPositions focusLayout do
+    -- Phase 4: User explores detail view (no physics)
+    enterDetailMode nodeId
+
+handleExitDetail :: Effect Unit
+handleExitDetail = do
+  -- Animate back to captured positions
+  animatePositions currentPositions capturedPositions do
+    -- Re-engage simulation
+    simHandle.reheat
+    simHandle.start
+----
+
+== Key Techniques
+
+=== Capturing Positions
+
+Always capture positions before stopping simulation:
+
+[source,purescript]
+----
+capturedPositions <- simHandle.getNodes
+simHandle.stop
+-- Now nodes won't move, but you have their last physics positions
+----
+
+=== Smooth Handoff
+
+For seamless transitions, ensure the last physics positions match interpolation start:
+
+[source,purescript]
+----
+-- Don't do this (positions might have changed):
+simHandle.stop
+nodes <- simHandle.getNodes  -- Might be stale!
+
+-- Do this:
+nodes <- simHandle.getNodes
+simHandle.stop  -- Now nodes are frozen at captured positions
+----
+
+=== Re-engaging at Interpolation End
+
+Start simulation from interpolated end positions for continuity:
+
+[source,purescript]
+----
+onComplete: do
+  -- Nodes are already at target positions from interpolation
+  -- Simulation will start from there
+  simHandle.reheat
+  simHandle.start
+----
+
+== When to Use This Pattern
+
+* **Data storytelling**: Guide users through insights with controlled transitions
+* **Semantic zoom**: Physics for overview, interpolation for detail transitions
+* **Mode switching**: Different force configurations for different views
+* **Tutorial flows**: Step users through a visualization with animated waypoints
+
+== See Also
+
+* xref:how-to/interpolation-animation.adoc[Pure Interpolation Animation]
+* xref:getting-started/quickstart.adoc[Quick Start with Physics]
+* xref:understanding/architecture.adoc[Architecture Overview]

@@ -10,6 +10,8 @@
 * xref:how-to/draggable-nodes.adoc[Draggable Nodes]
 * xref:how-to/multiple-simulations.adoc[Multiple Simulations]
 * xref:how-to/react-callbacks.adoc[React Callbacks]
+* xref:how-to/interpolation-animation.adoc[Interpolation Animation]
+* xref:how-to/simulation-interpolation-cycle.adoc[Simulation + Interpolation]
 
 .Understanding
 * xref:understanding/framework-first.adoc[Framework-First Design]

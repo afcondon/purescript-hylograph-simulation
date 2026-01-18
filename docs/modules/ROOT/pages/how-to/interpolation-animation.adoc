@@ -1,0 +1,109 @@
+= Animating with Interpolation (No Physics)
+:description: How to animate nodes between positions using the transition engine without physics simulation.
+
+Sometimes you want smooth animated transitions between known positions without involving the physics engine. This is useful for:
+
+* Animating between pre-computed layouts (tree → radial → grid)
+* Storytelling transitions in data visualization
+* Controlled, predictable animations
+
+== Basic Interpolation
+
+The transition engine interpolates values over time with easing functions:
+
+[source,purescript]
+----
+import PSD3.Transition.Engine as Trans
+import PSD3.Transition.Coordinator as Coord
+import PSD3.Transition.Easing (cubicInOut)
+
+animateToPositions :: Array Node -> Array { x :: Number, y :: Number } -> Effect Unit
+animateToPositions nodes targetPositions = do
+  -- Create coordinator (drives the RAF loop)
+  coord <- Coord.create
+
+  -- Capture starting positions
+  let startPositions = map (\n -> { x: n.x, y: n.y }) nodes
+
+  -- Register interpolation consumer
+  _ <- Coord.register coord
+    { tick: \deltaMs -> do
+        progress <- Trans.advance deltaMs 800.0  -- 800ms duration
+        let easedProgress = cubicInOut progress
+
+        -- Interpolate each node
+        for_ (zip3 nodes startPositions targetPositions) \(node, start, target) -> do
+          node.x = start.x + (target.x - start.x) * easedProgress
+          node.y = start.y + (target.y - start.y) * easedProgress
+
+        renderNodes nodes
+
+        pure $ if progress >= 1.0
+          then Coord.Completed
+          else Coord.StillRunning
+
+    , onComplete: log "Animation complete!"
+    }
+
+  Coord.start coord
+----
+
+== Layout Transitions
+
+Animate between different layout algorithms:
+
+[source,purescript]
+----
+-- Compute layouts ahead of time
+treeLayout <- computeTreeLayout data
+radialLayout <- computeRadialLayout data
+gridLayout <- computeGridLayout data
+
+-- Animate: tree → radial → grid
+animateToPositions nodes treeLayout
+-- wait for completion...
+animateToPositions nodes radialLayout
+-- wait for completion...
+animateToPositions nodes gridLayout
+----
+
+== Easing Functions
+
+The transition engine provides standard easing functions:
+
+[cols="1,2"]
+|===
+| Function | Character
+
+| `linear` | Constant speed
+| `quadIn` | Slow start, accelerate
+| `quadOut` | Fast start, decelerate
+| `quadInOut` | Slow start and end
+| `cubicInOut` | Smoother slow start and end
+| `elasticOut` | Overshoot and bounce back
+| `bounceOut` | Bouncing effect at end
+|===
+
+== When to Use Interpolation vs Physics
+
+[cols="1,1"]
+|===
+| Use Interpolation | Use Physics
+
+| Known start and end positions
+| Positions emerge from forces
+
+| Predictable, repeatable animation
+| Organic, emergent behavior
+
+| Storytelling with fixed waypoints
+| Interactive exploration
+
+| Performance-critical (fewer calculations)
+| Complex node relationships
+|===
+
+== See Also
+
+* xref:how-to/simulation-interpolation-cycle.adoc[Combining Simulation and Interpolation]
+* xref:getting-started/quickstart.adoc[Quick Start with Physics]
