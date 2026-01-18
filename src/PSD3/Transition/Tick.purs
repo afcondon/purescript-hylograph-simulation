@@ -45,7 +45,7 @@ module PSD3.Transition.Tick
   , lerp
   , lerpClamped
   , lerpInt
-    -- * Easing functions
+    -- * Easing functions (Quad/Cubic)
   , linear
   , easeIn
   , easeOut
@@ -56,6 +56,30 @@ module PSD3.Transition.Tick
   , easeInCubic
   , easeOutCubic
   , easeInOutCubic
+    -- * Easing functions (Sinusoidal)
+  , easeInSin
+  , easeOutSin
+  , easeInOutSin
+    -- * Easing functions (Exponential)
+  , easeInExp
+  , easeOutExp
+  , easeInOutExp
+    -- * Easing functions (Circular)
+  , easeInCircle
+  , easeOutCircle
+  , easeInOutCircle
+    -- * Easing functions (Back - overshoot)
+  , easeInBack
+  , easeOutBack
+  , easeInOutBack
+    -- * Easing functions (Elastic - spring)
+  , easeInElastic
+  , easeOutElastic
+  , easeInOutElastic
+    -- * Easing functions (Bounce)
+  , easeInBounce
+  , easeOutBounce
+  , easeInOutBounce
     -- * Combinators
   , withEasing
   , ticksForDuration
@@ -67,6 +91,7 @@ import Data.Array as Array
 import Data.Int (round, toNumber)
 import Data.Map (Map)
 import Data.Map as Map
+import Data.Number (cos, pi, pow, sin, sqrt)
 import Data.Set as Set
 
 -- =============================================================================
@@ -225,6 +250,167 @@ easeInOutCubic t =
   if t < 0.5
     then 4.0 * t * t * t
     else 1.0 - ((-2.0 * t + 2.0) * (-2.0 * t + 2.0) * (-2.0 * t + 2.0)) / 2.0
+
+-- =============================================================================
+-- Sinusoidal Easing
+-- =============================================================================
+
+-- | Sinusoidal ease in: 1 - cos(t * π/2)
+easeInSin :: Easing
+easeInSin t = 1.0 - cos(t * pi / 2.0)
+
+-- | Sinusoidal ease out: sin(t * π/2)
+easeOutSin :: Easing
+easeOutSin t = sin(t * pi / 2.0)
+
+-- | Sinusoidal ease in-out: -(cos(π * t) - 1) / 2
+easeInOutSin :: Easing
+easeInOutSin t = -(cos(pi * t) - 1.0) / 2.0
+
+-- =============================================================================
+-- Exponential Easing
+-- =============================================================================
+
+-- | Exponential ease in: 2^(10 * (t - 1))
+easeInExp :: Easing
+easeInExp t =
+  if t == 0.0 then 0.0
+  else pow 2.0 (10.0 * (t - 1.0))
+
+-- | Exponential ease out: 1 - 2^(-10 * t)
+easeOutExp :: Easing
+easeOutExp t =
+  if t == 1.0 then 1.0
+  else 1.0 - pow 2.0 (-10.0 * t)
+
+-- | Exponential ease in-out
+easeInOutExp :: Easing
+easeInOutExp t =
+  if t == 0.0 then 0.0
+  else if t == 1.0 then 1.0
+  else if t < 0.5 then pow 2.0 (20.0 * t - 10.0) / 2.0
+  else (2.0 - pow 2.0 (-20.0 * t + 10.0)) / 2.0
+
+-- =============================================================================
+-- Circular Easing
+-- =============================================================================
+
+-- | Circular ease in: 1 - sqrt(1 - t²)
+easeInCircle :: Easing
+easeInCircle t = 1.0 - sqrt(1.0 - t * t)
+
+-- | Circular ease out: sqrt(1 - (t - 1)²)
+easeOutCircle :: Easing
+easeOutCircle t = sqrt(1.0 - (t - 1.0) * (t - 1.0))
+
+-- | Circular ease in-out
+easeInOutCircle :: Easing
+easeInOutCircle t =
+  if t < 0.5
+    then (1.0 - sqrt(1.0 - (2.0 * t) * (2.0 * t))) / 2.0
+    else (sqrt(1.0 - (-2.0 * t + 2.0) * (-2.0 * t + 2.0)) + 1.0) / 2.0
+
+-- =============================================================================
+-- Back Easing (Overshoot)
+-- =============================================================================
+
+-- Overshoot constant (standard value from Robert Penner's easing)
+backC1 :: Number
+backC1 = 1.70158
+
+backC2 :: Number
+backC2 = backC1 * 1.525
+
+backC3 :: Number
+backC3 = backC1 + 1.0
+
+-- | Back ease in: overshoots then returns
+easeInBack :: Easing
+easeInBack t = backC3 * t * t * t - backC1 * t * t
+
+-- | Back ease out: overshoots past target then settles
+easeOutBack :: Easing
+easeOutBack t =
+  let t' = t - 1.0
+  in 1.0 + backC3 * t' * t' * t' + backC1 * t' * t'
+
+-- | Back ease in-out: overshoots on both ends
+easeInOutBack :: Easing
+easeInOutBack t =
+  if t < 0.5
+    then ((2.0 * t) * (2.0 * t) * ((backC2 + 1.0) * 2.0 * t - backC2)) / 2.0
+    else ((2.0 * t - 2.0) * (2.0 * t - 2.0) * ((backC2 + 1.0) * (t * 2.0 - 2.0) + backC2) + 2.0) / 2.0
+
+-- =============================================================================
+-- Elastic Easing (Spring)
+-- =============================================================================
+
+-- Elastic constants
+elasticC4 :: Number
+elasticC4 = (2.0 * pi) / 3.0
+
+elasticC5 :: Number
+elasticC5 = (2.0 * pi) / 4.5
+
+-- | Elastic ease in: spring-like start
+easeInElastic :: Easing
+easeInElastic t =
+  if t == 0.0 then 0.0
+  else if t == 1.0 then 1.0
+  else -pow 2.0 (10.0 * t - 10.0) * sin((t * 10.0 - 10.75) * elasticC4)
+
+-- | Elastic ease out: spring-like end (most common)
+easeOutElastic :: Easing
+easeOutElastic t =
+  if t == 0.0 then 0.0
+  else if t == 1.0 then 1.0
+  else pow 2.0 (-10.0 * t) * sin((t * 10.0 - 0.75) * elasticC4) + 1.0
+
+-- | Elastic ease in-out: spring on both ends
+easeInOutElastic :: Easing
+easeInOutElastic t =
+  if t == 0.0 then 0.0
+  else if t == 1.0 then 1.0
+  else if t < 0.5
+    then -(pow 2.0 (20.0 * t - 10.0) * sin((20.0 * t - 11.125) * elasticC5)) / 2.0
+    else (pow 2.0 (-20.0 * t + 10.0) * sin((20.0 * t - 11.125) * elasticC5)) / 2.0 + 1.0
+
+-- =============================================================================
+-- Bounce Easing
+-- =============================================================================
+
+-- Bounce constants
+bounceN1 :: Number
+bounceN1 = 7.5625
+
+bounceD1 :: Number
+bounceD1 = 2.75
+
+-- | Bounce ease out: ball bouncing to rest
+easeOutBounce :: Easing
+easeOutBounce t =
+  if t < 1.0 / bounceD1 then
+    bounceN1 * t * t
+  else if t < 2.0 / bounceD1 then
+    let t' = t - 1.5 / bounceD1
+    in bounceN1 * t' * t' + 0.75
+  else if t < 2.5 / bounceD1 then
+    let t' = t - 2.25 / bounceD1
+    in bounceN1 * t' * t' + 0.9375
+  else
+    let t' = t - 2.625 / bounceD1
+    in bounceN1 * t' * t' + 0.984375
+
+-- | Bounce ease in: reverse of bounce out
+easeInBounce :: Easing
+easeInBounce t = 1.0 - easeOutBounce (1.0 - t)
+
+-- | Bounce ease in-out: bounce on both ends
+easeInOutBounce :: Easing
+easeInOutBounce t =
+  if t < 0.5
+    then (1.0 - easeOutBounce (1.0 - 2.0 * t)) / 2.0
+    else (1.0 + easeOutBounce (2.0 * t - 1.0)) / 2.0
 
 -- =============================================================================
 -- Combinators
