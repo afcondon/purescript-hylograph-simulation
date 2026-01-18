@@ -36,6 +36,7 @@ package:
     - tuples
     - unsafe-coerce
     - web-dom
+    - web-pointerevents
   test:
     main: Test.Main
     dependencies:

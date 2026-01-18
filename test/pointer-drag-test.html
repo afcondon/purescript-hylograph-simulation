@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Pointer Events Drag Test</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 20px;
+      background: #1a1a2e;
+      color: #eee;
+    }
+    h1 { color: #4a9eff; margin-bottom: 10px; }
+    .container {
+      display: flex;
+      gap: 40px;
+      margin-top: 20px;
+    }
+    .panel {
+      background: #16213e;
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .panel h2 {
+      margin: 0 0 15px 0;
+      color: #888;
+      font-size: 14px;
+      text-transform: uppercase;
+    }
+    svg {
+      background: #0f0f1a;
+      border-radius: 4px;
+    }
+    circle {
+      cursor: grab;
+    }
+    circle:active {
+      cursor: grabbing;
+    }
+    .status {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #666;
+      height: 20px;
+    }
+    .info {
+      margin-top: 30px;
+      padding: 15px;
+      background: #0f3460;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    code {
+      background: #1a1a2e;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Fira Code', monospace;
+    }
+  </style>
+</head>
+<body>
+  <h1>Pointer Events Drag Test</h1>
+  <p>Compare D3 drag (left) vs native Pointer Events drag (right)</p>
+
+  <div class="container">
+    <div class="panel">
+      <h2>D3 Drag (d3-drag)</h2>
+      <svg id="d3-svg" width="400" height="300"></svg>
+      <div class="status" id="d3-status">Drag any node...</div>
+    </div>
+
+    <div class="panel">
+      <h2>Pointer Events Drag (native)</h2>
+      <svg id="pointer-svg" width="400" height="300"></svg>
+      <div class="status" id="pointer-status">Drag any node...</div>
+    </div>
+  </div>
+
+  <div class="info">
+    <strong>What's being tested:</strong><br>
+    • <code>setPointerCapture</code> - drag continues even when cursor leaves element<br>
+    • SVG coordinate transformation - client coords → SVG coords via CTM<br>
+    • Touch support - works identically with touch/pen (pointer events unified)<br>
+    • Simulation reheat - alpha resets when drag starts
+  </div>
+
+  <script type="module">
+    // Load D3 from CDN
+    import { forceSimulation, forceManyBody, forceCenter } from 'https://esm.sh/d3-force@3';
+    import { select } from 'https://esm.sh/d3-selection@3';
+    import { drag } from 'https://esm.sh/d3-drag@3';
+
+    // Create test data
+    function makeNodes(n) {
+      const nodes = [];
+      for (let i = 0; i < n; i++) {
+        const row = Math.floor(i / 5);
+        const col = i % 5;
+        nodes.push({
+          id: i,
+          x: 100 + col * 60,
+          y: 80 + row * 60,
+          vx: 0,
+          vy: 0
+        });
+      }
+      return nodes;
+    }
+
+    // === D3 DRAG (LEFT) ===
+    const d3Nodes = makeNodes(10);
+    const d3Svg = select('#d3-svg');
+    const d3Status = document.getElementById('d3-status');
+
+    const d3Simulation = forceSimulation(d3Nodes)
+      .force('charge', forceManyBody().strength(-30))
+      .force('center', forceCenter(200, 150))
+      .on('tick', () => {
+        d3Circles.attr('cx', d => d.x).attr('cy', d => d.y);
+      });
+
+    const d3Circles = d3Svg.selectAll('circle')
+      .data(d3Nodes)
+      .join('circle')
+      .attr('r', 15)
+      .attr('fill', '#4a9eff')
+      .attr('cx', d => d.x)
+      .attr('cy', d => d.y)
+      .call(drag()
+        .on('start', (event, d) => {
+          if (!event.active) d3Simulation.alphaTarget(0.3).restart();
+          d.fx = d.x;
+          d.fy = d.y;
+          d3Status.textContent = `Dragging node ${d.id} (D3 drag)`;
+        })
+        .on('drag', (event, d) => {
+          d.fx = event.x;
+          d.fy = event.y;
+        })
+        .on('end', (event, d) => {
+          if (!event.active) d3Simulation.alphaTarget(0);
+          d.fx = null;
+          d.fy = null;
+          d3Status.textContent = 'Drag any node...';
+        })
+      );
+
+    // === POINTER EVENTS DRAG (RIGHT) ===
+    const ptrNodes = makeNodes(10);
+    const ptrSvg = document.getElementById('pointer-svg');
+    const ptrStatus = document.getElementById('pointer-status');
+
+    const ptrSimulation = forceSimulation(ptrNodes)
+      .force('charge', forceManyBody().strength(-30))
+      .force('center', forceCenter(200, 150))
+      .on('tick', () => {
+        ptrCircles.forEach((circle, i) => {
+          circle.setAttribute('cx', ptrNodes[i].x);
+          circle.setAttribute('cy', ptrNodes[i].y);
+        });
+      });
+
+    // Create circles manually (no D3 for this side)
+    const ptrCircles = ptrNodes.map((node, i) => {
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('r', 15);
+      circle.setAttribute('fill', '#10b981');
+      circle.setAttribute('cx', node.x);
+      circle.setAttribute('cy', node.y);
+      circle.__data__ = node;  // Bind data like D3 does
+
+      // NATIVE POINTER EVENTS DRAG
+      let isDragging = false;
+
+      circle.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0) return;
+
+        isDragging = true;
+        circle.setPointerCapture(event.pointerId);
+        event.preventDefault();
+
+        // Reheat simulation
+        ptrSimulation.alphaTarget(0.3).restart();
+
+        // Pin node
+        node.fx = node.x;
+        node.fy = node.y;
+
+        circle.style.cursor = 'grabbing';
+        ptrStatus.textContent = `Dragging node ${node.id} (Pointer Events)`;
+      });
+
+      circle.addEventListener('pointermove', (event) => {
+        if (!isDragging) return;
+
+        // Convert client coords to SVG coords
+        const pt = ptrSvg.createSVGPoint();
+        pt.x = event.clientX;
+        pt.y = event.clientY;
+        const ctm = ptrSvg.getScreenCTM();
+        if (ctm) {
+          const svgPt = pt.matrixTransform(ctm.inverse());
+          node.fx = svgPt.x;
+          node.fy = svgPt.y;
+        }
+      });
+
+      circle.addEventListener('pointerup', (event) => {
+        if (!isDragging) return;
+
+        isDragging = false;
+        circle.releasePointerCapture(event.pointerId);
+
+        ptrSimulation.alphaTarget(0);
+        node.fx = null;
+        node.fy = null;
+
+        circle.style.cursor = 'grab';
+        ptrStatus.textContent = 'Drag any node...';
+      });
+
+      circle.addEventListener('pointercancel', (event) => {
+        if (!isDragging) return;
+        isDragging = false;
+        node.fx = null;
+        node.fy = null;
+        circle.style.cursor = 'grab';
+      });
+
+      // Prevent browser drag
+      circle.addEventListener('dragstart', e => e.preventDefault());
+
+      circle.style.cursor = 'grab';
+      circle.style.touchAction = 'none';
+
+      ptrSvg.appendChild(circle);
+      return circle;
+    });
+
+    console.log('Test initialized. Both panels should behave identically.');
+  </script>
+</body>
+</html>
