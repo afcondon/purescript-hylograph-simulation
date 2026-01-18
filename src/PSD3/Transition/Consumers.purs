@@ -3,17 +3,19 @@
 -- | Adapters that wrap various animation sources as TickConsumers
 -- | for use with the Coordinator.
 -- |
--- | Currently supports:
+-- | Supported:
 -- | - TransitionState from Engine.purs
 -- | - TransitionGroup from Engine.purs
+-- | - D3 force simulation (via ForceEngine)
 -- |
--- | Future:
--- | - D3 force simulation
--- | - WASM force kernel
+-- | Documented (requires local FFI):
+-- | - WASM force kernel (see pattern at bottom of file)
 module PSD3.Transition.Consumers
   ( -- * Transition consumers
     transitionConsumer
   , transitionGroupConsumer
+    -- * Force simulation consumer
+  , simulationConsumer
     -- * Re-exports for convenience
   , module Engine
   , module Coordinator
@@ -28,6 +30,7 @@ import PSD3.Transition.Coordinator (TickResult(..), Milliseconds)
 import PSD3.Transition.Coordinator (TickResult(..), Milliseconds) as Coordinator
 import PSD3.Transition.Engine (TransitionState, TransitionGroup)
 import PSD3.Transition.Engine (start, tick, currentValue, isComplete, group, groupTick, groupValues, groupComplete) as Engine
+import PSD3.ForceEngine.Simulation (Simulation, tick) as FE
 
 -- =============================================================================
 -- Single Transition Consumer
@@ -91,11 +94,72 @@ transitionGroupConsumer groupRef onValues deltaMs = do
     else StillRunning
 
 -- =============================================================================
--- Future: Simulation Consumers
+-- D3 Force Simulation Consumer
 -- =============================================================================
 
--- TODO: D3 simulation consumer
--- d3SimulationConsumer :: D3Simulation -> (Array Position -> Effect Unit) -> Milliseconds -> Effect TickResult
+-- | Create a tick function for a D3 force simulation.
+-- |
+-- | The simulation's `tick` function is called on each frame.
+-- | Returns Converged with the alpha value, or Completed when alpha drops below threshold.
+-- |
+-- | **Important**: Do NOT call `FE.start` on the simulation - the Coordinator
+-- | owns the RAF loop. Just call `FE.create`, `FE.setNodes`, `FE.addForce`, etc.
+-- |
+-- | Usage:
+-- | ```purescript
+-- | sim <- FE.create FE.defaultConfig
+-- | FE.setNodes myNodes sim
+-- | FE.addForce (FE.ManyBody "charge" FE.defaultManyBody) sim
+-- |
+-- | C.register coord
+-- |   { tick: simulationConsumer sim 0.001 \nodes -> renderNodes nodes
+-- |   , onComplete: log "Simulation converged!"
+-- |   }
+-- | ```
+simulationConsumer
+  :: forall row linkRow
+   . FE.Simulation row linkRow
+  -> Number                           -- ^ Alpha threshold for completion (e.g., 0.001)
+  -> (Effect Unit)                    -- ^ Effect to run after each tick (e.g., render)
+  -> Milliseconds
+  -> Effect TickResult
+simulationConsumer sim alphaMin onTick _deltaMs = do
+  alpha <- FE.tick sim
+  onTick
+  pure $ if alpha < alphaMin
+    then Completed
+    else Converged alpha
 
--- TODO: WASM simulation consumer
--- wasmSimulationConsumer :: WASMSimulation -> (Array Position -> Effect Unit) -> Milliseconds -> Effect TickResult
+-- =============================================================================
+-- WASM Simulation Consumer (Pattern)
+-- =============================================================================
+
+-- | The WASM force kernel has an identical tick model to D3:
+-- |
+-- | ```javascript
+-- | // WASM API (from Rust via wasm-bindgen)
+-- | simulation.tick()        // -> alpha: f32
+-- | simulation.get_alpha()   // -> alpha: f32
+-- | simulation.get_positions() // -> Float32Array
+-- | simulation.is_running()  // -> bool
+-- | ```
+-- |
+-- | A WASM consumer would look like:
+-- |
+-- | ```purescript
+-- | wasmConsumer
+-- |   :: WASMSimulation       -- ^ The WASM simulation instance
+-- |   -> Number               -- ^ Alpha threshold for completion
+-- |   -> (Effect Unit)        -- ^ Render callback
+-- |   -> Milliseconds
+-- |   -> Effect TickResult
+-- | wasmConsumer sim alphaMin onTick _deltaMs = do
+-- |   alpha <- wasmTick sim   -- FFI call to simulation.tick()
+-- |   onTick
+-- |   pure $ if alpha < alphaMin then Completed else Converged alpha
+-- | ```
+-- |
+-- | Implementation note: The WASM kernel lives in showcases/wasm-force-demo/force-kernel.
+-- | To use it, either:
+-- | 1. Create the consumer in the showcase with local FFI bindings
+-- | 2. Or move the WASM kernel into psd3-simulation as a reusable module

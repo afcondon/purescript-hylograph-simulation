@@ -2,8 +2,6 @@ workspace:
   packageSet:
     registry: 67.0.1
   extraPackages:
-    psd3-tree:
-      path: ../purescript-psd3-tree
     psd3-graph:
       path: ../purescript-psd3-graph
     psd3-selection:
@@ -19,10 +17,12 @@ package:
       githubOwner: afcondon
       githubRepo: purescript-psd3-simulation
   dependencies:
+    - aff
     - arrays
     - console
     - effect
     - foldable-traversable
+    - foreign-object
     - functions
     - integers
     - maybe

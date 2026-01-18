@@ -1,5 +1,7 @@
 # purescript-psd3-simulation
 
+[![Force Playground Demo](../../site/lib-simulation/public/demo.jpeg)](https://polyglot-purescript.org/#/force-playground)
+
 Force-directed graph simulation for PureScript D3.
 
 ## Overview

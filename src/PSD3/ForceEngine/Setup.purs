@@ -31,7 +31,7 @@ module PSD3.ForceEngine.Setup
   , valueToNumber
 
     -- * Force Configuration
-  , ForceType  -- Type only (use smart constructors)
+  , ForceType(..)  -- Export constructors for engine implementations
   , ForceConfig
   , forceName
   , manyBody
@@ -80,6 +80,12 @@ module PSD3.ForceEngine.Setup
   , GUPResult
   , GUPLinkResult
   , applySetupWithData
+
+    -- * GUP Helpers (for engine implementations)
+  , NodeGUPInternal
+  , computeNodeGUP
+  , computeLinkGUP
+  , mergeSimulationState
 
     -- * Incremental Operations
   , addForceToSim

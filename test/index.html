@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>High-Level API Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 20px;
+      background: #1a1a2e;
+      color: #eee;
+    }
+    h1 {
+      color: #4a9eff;
+      margin-bottom: 10px;
+    }
+    h2 {
+      color: #888;
+      font-size: 14px;
+      font-weight: normal;
+      margin-bottom: 30px;
+    }
+    .simulations {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    .sim-panel {
+      flex: 1;
+      padding: 20px;
+      background: #16213e;
+      border-radius: 8px;
+    }
+    .sim-panel h3 {
+      margin-top: 0;
+      color: #4a9eff;
+      font-size: 14px;
+    }
+    .sim-panel svg {
+      width: 100%;
+      height: 150px;
+      background: #0d1b2a;
+      border-radius: 8px;
+    }
+    #status {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #16213e;
+      padding: 15px 20px;
+      border-radius: 8px;
+      font-size: 12px;
+      max-width: 400px;
+    }
+    #status h4 {
+      margin: 0 0 10px 0;
+      color: #4a9eff;
+    }
+    #console {
+      font-family: monospace;
+      font-size: 11px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    #console div {
+      padding: 2px 0;
+      border-bottom: 1px solid #333;
+    }
+    .log-complete {
+      color: #22c55e;
+    }
+    .log-error {
+      color: #ef4444;
+    }
+  </style>
+</head>
+<body>
+  <h1>High-Level API Test</h1>
+  <h2>Unified SimulationEmitter for D3 and WASM engines</h2>
+
+  <div class="simulations">
+    <div class="sim-panel">
+      <h3>D3 Engine (cyan nodes)</h3>
+      <svg id="d3-sim"></svg>
+    </div>
+    <div class="sim-panel">
+      <h3>WASM Engine (orange nodes)</h3>
+      <svg id="wasm-sim"></svg>
+    </div>
+  </div>
+
+  <div id="status">
+    <h4>Console Output</h4>
+    <div id="console"></div>
+  </div>
+
+  <script>
+    // Capture console.log to display in page
+    const consoleDiv = document.getElementById('console');
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = function(...args) {
+      originalLog.apply(console, args);
+      const msg = args.join(' ');
+      const div = document.createElement('div');
+      div.textContent = msg;
+      if (msg.includes('✓') || msg.includes('complete') || msg.includes('converged')) {
+        div.className = 'log-complete';
+      }
+      consoleDiv.appendChild(div);
+      consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    };
+    console.error = function(...args) {
+      originalError.apply(console, args);
+      const msg = args.join(' ');
+      const div = document.createElement('div');
+      div.textContent = 'ERROR: ' + msg;
+      div.className = 'log-error';
+      consoleDiv.appendChild(div);
+      consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    };
+  </script>
+
+  <script src="./bundle.js"></script>
+</body>
+</html>
