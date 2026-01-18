@@ -39,6 +39,7 @@ module PSD3.Transition.Engine
   , TransitionConfig
   , transition
   , transitionWith
+  , withDelay
     -- * Transition state
   , TransitionState
   , start
@@ -55,6 +56,16 @@ module PSD3.Transition.Engine
   , groupValues
   , groupComplete
   , groupRemaining
+    -- * Staggered transitions
+  , staggeredGroup
+  , staggeredSpecs
+  , IndexedTransition
+  , IndexedTransitionGroup
+  , staggeredGroupIndexed
+  , indexedGroupTick
+  , indexedValues
+  , indexedGroupComplete
+  , indexedGroupRemaining
     -- * Utilities
   , defaultConfig
   , Milliseconds
@@ -62,7 +73,9 @@ module PSD3.Transition.Engine
 
 import Prelude
 
+import Data.Array (mapWithIndex, (..))
 import Data.Foldable (all, maximum)
+import Data.Int (toNumber)
 import Data.Maybe (fromMaybe)
 import PSD3.Transition.Tick (Progress, lerp)
 import PSD3.Transition.Easing (EasingType(..), toFunction)
@@ -227,3 +240,109 @@ groupComplete (TransitionGroup g) = all isComplete g.transitions
 groupRemaining :: TransitionGroup -> Milliseconds
 groupRemaining (TransitionGroup g) =
   fromMaybe 0.0 $ maximum $ map remaining g.transitions
+
+-- =============================================================================
+-- Staggered Transitions
+-- =============================================================================
+
+-- | Add a delay to a transition spec
+withDelay :: forall a. Milliseconds -> TransitionSpec a -> TransitionSpec a
+withDelay delay spec =
+  spec { config = spec.config { delay = delay } }
+
+-- | Create staggered specs from a base spec and count
+-- | Each transition gets an additional delay based on its index
+-- |
+-- | Example: staggeredSpecs 5 50.0 baseSpec
+-- |   -> 5 specs with delays 0ms, 50ms, 100ms, 150ms, 200ms
+staggeredSpecs
+  :: Int                   -- ^ Number of transitions
+  -> Milliseconds          -- ^ Delay between each transition
+  -> TransitionSpec Number -- ^ Base spec (from/to will be the same for all)
+  -> Array (TransitionSpec Number)
+staggeredSpecs count staggerDelay baseSpec =
+  map mkSpec (0 .. (count - 1))
+  where
+    mkSpec :: Int -> TransitionSpec Number
+    mkSpec i =
+      let indexDelay = toNumber i * staggerDelay
+      in withDelay (baseSpec.config.delay + indexDelay) baseSpec
+
+-- | Create a staggered group from multiple value pairs
+-- | Each transition animates between its own from/to values with staggered timing
+-- |
+-- | Example:
+-- | ```purescript
+-- | let specs = staggeredGroup
+-- |       [{ from: 0.0, to: 100.0 }, { from: 50.0, to: 150.0 }]
+-- |       50.0
+-- |       { duration: 300.0, easing: QuadOut }
+-- | ```
+staggeredGroup
+  :: Array { from :: Number, to :: Number }  -- ^ Value pairs for each element
+  -> Milliseconds                            -- ^ Delay between each transition
+  -> { duration :: Milliseconds, easing :: EasingType }
+  -> TransitionGroup
+staggeredGroup valuePairs staggerDelay opts =
+  TransitionGroup { transitions: mapWithIndex mkTransition valuePairs }
+  where
+    mkTransition :: Int -> { from :: Number, to :: Number } -> TransitionState Number
+    mkTransition i values =
+      let
+        indexDelay = toNumber i * staggerDelay
+        spec = transition values opts
+        delayedSpec = withDelay indexDelay spec
+      in start delayedSpec
+
+-- | A transition with its associated index (for tracking which element it belongs to)
+type IndexedTransition =
+  { index :: Int
+  , state :: TransitionState Number
+  }
+
+-- | Newtype for indexed transition groups
+newtype IndexedTransitionGroup = IndexedTransitionGroup
+  { transitions :: Array IndexedTransition
+  }
+
+-- | Create a staggered group that tracks element indices
+-- | Useful when you need to know which value corresponds to which data element
+staggeredGroupIndexed
+  :: Array { from :: Number, to :: Number }  -- ^ Value pairs for each element
+  -> Milliseconds                            -- ^ Delay between each transition
+  -> { duration :: Milliseconds, easing :: EasingType }
+  -> IndexedTransitionGroup
+staggeredGroupIndexed valuePairs staggerDelay opts =
+  IndexedTransitionGroup { transitions: mapWithIndex mkTransition valuePairs }
+  where
+    mkTransition :: Int -> { from :: Number, to :: Number } -> IndexedTransition
+    mkTransition i values =
+      let
+        indexDelay = toNumber i * staggerDelay
+        spec = transition values opts
+        delayedSpec = withDelay indexDelay spec
+      in { index: i, state: start delayedSpec }
+
+-- | Tick all transitions in an indexed group
+indexedGroupTick :: Milliseconds -> IndexedTransitionGroup -> IndexedTransitionGroup
+indexedGroupTick delta (IndexedTransitionGroup g) = IndexedTransitionGroup
+  { transitions: map tickIndexed g.transitions
+  }
+  where
+    tickIndexed :: IndexedTransition -> IndexedTransition
+    tickIndexed t = t { state = tick delta t.state }
+
+-- | Get current values with their indices
+indexedValues :: IndexedTransitionGroup -> Array { index :: Int, value :: Number }
+indexedValues (IndexedTransitionGroup g) =
+  map (\t -> { index: t.index, value: currentValue t.state }) g.transitions
+
+-- | Check if all transitions in indexed group are complete
+indexedGroupComplete :: IndexedTransitionGroup -> Boolean
+indexedGroupComplete (IndexedTransitionGroup g) =
+  all (\t -> isComplete t.state) g.transitions
+
+-- | Get maximum remaining time in indexed group
+indexedGroupRemaining :: IndexedTransitionGroup -> Milliseconds
+indexedGroupRemaining (IndexedTransitionGroup g) =
+  fromMaybe 0.0 $ maximum $ map (\t -> remaining t.state) g.transitions
