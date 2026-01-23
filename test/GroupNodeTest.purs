@@ -69,7 +69,7 @@ main = do
     , container: "#test1"
     , nodeElement: "g"  -- Group element like beeswarm
     , nodeTemplate: groupNodeTemplate
-    , alphaMin: 0.001
+    , alphaMin: 0.001, renderNodes: true
     }
 
   _ <- subscribe result1.events \event -> case event of
@@ -89,7 +89,7 @@ main = do
     , container: "#test2"
     , nodeElement: "circle"  -- Direct circle like working test
     , nodeTemplate: circleNodeTemplate
-    , alphaMin: 0.001
+    , alphaMin: 0.001, renderNodes: true
     }
 
   case result2E of
@@ -114,7 +114,7 @@ main = do
     , container: "#test3"
     , nodeElement: "circle"
     , nodeTemplate: circleNodeTemplateTarget
-    , alphaMin: 0.001
+    , alphaMin: 0.001, renderNodes: true
     }
 
   case result3E of

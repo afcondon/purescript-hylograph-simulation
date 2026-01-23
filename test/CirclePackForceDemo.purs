@@ -269,7 +269,7 @@ startSimulation nodes = do
     , container: "#packages-group"
     , nodeElement: "g"
     , nodeTemplate: packageNodeTemplate
-    , alphaMin: 0.001
+    , alphaMin: 0.001, renderNodes: true
     }
 
   -- Subscribe to events

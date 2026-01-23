@@ -52,6 +52,9 @@ module PSD3.Simulation
     -- * Handle (for controlling the simulation)
   , SimulationHandle
 
+    -- * Position interpolation types
+  , PositionMap
+
     -- * Events (framework-agnostic)
   , module EmitterExports
 
@@ -128,6 +131,9 @@ import PSD3.ForceEngine.Simulation (SimulationNode) as SimNodeExports
 -- Types
 -- =============================================================================
 
+-- | Position map for interpolation - keyed by node ID (as string)
+type PositionMap = D3Sim.PositionMap
+
 -- | Physics engine selection
 data Engine = D3 | WASM
 
@@ -167,6 +173,8 @@ type SimulationConfig r =
   , nodeElement :: String -- SVG element type for join ("circle", "g", etc.)
   , nodeTemplate :: D3Sim.SimulationNode r -> A.Tree (D3Sim.SimulationNode r)
   , alphaMin :: Number   -- Convergence threshold (default: 0.001)
+  , renderNodes :: Boolean -- Whether runSimulation renders nodes (default: true)
+                           -- Set to false for manual rendering via handle.getNodes
   }
 
 -- | Result returned by runSimulation
@@ -203,6 +211,19 @@ type SimulationHandle r =
 
     -- | Reheat the simulation (reset alpha to 1.0)
   , reheat :: Effect Unit
+
+    -- | Interpolate node positions between start and target positions.
+    -- | Progress should be 0.0 to 1.0 (apply easing before calling).
+    -- | Used for animated transitions like quadrant layout.
+  , interpolatePositions :: D3Sim.PositionMap -> D3Sim.PositionMap -> Number -> Effect Unit
+
+    -- | Pin all nodes at their current positions (fx = x, fy = y).
+    -- | Use before starting a transition to freeze current state.
+  , pinNodes :: Effect Unit
+
+    -- | Unpin all nodes (fx = null, fy = null).
+    -- | Use after transition to let forces take over again.
+  , unpinNodes :: Effect Unit
   }
 
 -- =============================================================================
@@ -307,6 +328,23 @@ runD3Simulation config = do
             D3Sim.reheat sim
             Ref.write 1.0 alphaRef
             Emitter.emit emitterHandle Started
+            -- Restart coordinator if simulation has completed
+            running <- Ref.read runningRef
+            unless running do
+              Ref.write true runningRef
+              -- Stop old coordinator and create new one
+              oldCoord <- Ref.read coordRef
+              Coord.stop oldCoord
+              c <- Coord.create
+              Ref.write c coordRef
+              _ <- Coord.register c
+                { tick: d3Consumer sim emitterHandle alphaRef config.alphaMin do
+                    renderNodes config sim
+                , onComplete: do
+                    Ref.write false runningRef
+                    Emitter.emit emitterHandle Completed
+                }
+              Coord.start c
 
         , getNodes: D3Sim.getNodes sim
 
@@ -325,6 +363,9 @@ runD3Simulation config = do
               Ref.write 1.0 alphaRef
               Ref.write true runningRef
               Emitter.emit emitterHandle Started
+              -- Stop old coordinator before creating new one (prevents CPU spike from multiple RAF loops)
+              oldCoord <- Ref.read coordRef
+              Coord.stop oldCoord
               -- Re-register and restart
               c <- Coord.create
               Ref.write c coordRef
@@ -341,6 +382,13 @@ runD3Simulation config = do
             D3Sim.reheat sim
             Ref.write 1.0 alphaRef
             Emitter.emit emitterHandle Started
+
+        , interpolatePositions: \startPos targetPos progress ->
+            D3Sim.interpolatePositionsInPlace startPos targetPos progress sim
+
+        , pinNodes: D3Sim.pinNodesInPlace sim
+
+        , unpinNodes: D3Sim.unpinNodesInPlace sim
         }
     }
 
@@ -370,12 +418,15 @@ d3Consumer sim emitterHandle alphaRef alphaMin onTick _deltaMs = do
 -- | This ensures the data join matches nodes by id rather than comparing all fields,
 -- | which is essential because x/y positions change on every tick.
 -- | Uses renderTreeKeyed which doesn't require Ord on the datum type.
+-- |
+-- | When `config.renderNodes` is false, this function is a no-op. This allows
+-- | callers to handle rendering themselves via `handle.getNodes`.
 renderNodes
   :: forall r
    . SimulationConfig r
   -> D3Sim.Simulation r ()
   -> Effect Unit
-renderNodes config sim = do
+renderNodes config sim = when config.renderNodes do
   nodes <- D3Sim.getNodes sim
   container <- Ops.select config.container
   void $ renderTreeKeyed container (A.updateJoin "sim-nodes" config.nodeElement nodes config.nodeTemplate
@@ -453,6 +504,23 @@ runWASMSimulation config = do
             WASMSetup.reheat sim
             Ref.write 1.0 alphaRef
             Emitter.emit emitterHandle Started
+            -- Restart coordinator if simulation has completed
+            running <- Ref.read runningRef
+            unless running do
+              Ref.write true runningRef
+              -- Stop old coordinator and create new one
+              oldCoord <- Ref.read coordRef
+              Coord.stop oldCoord
+              c <- Coord.create
+              Ref.write c coordRef
+              _ <- Coord.register c
+                { tick: wasmConsumer sim emitterHandle alphaRef config.alphaMin do
+                    renderWASMNodes config sim
+                , onComplete: do
+                    Ref.write false runningRef
+                    Emitter.emit emitterHandle Completed
+                }
+              Coord.start c
 
         , getNodes: WASMSetup.getNodes sim
 
@@ -471,6 +539,9 @@ runWASMSimulation config = do
               Ref.write 1.0 alphaRef
               Ref.write true runningRef
               Emitter.emit emitterHandle Started
+              -- Stop old coordinator before creating new one (prevents CPU spike from multiple RAF loops)
+              oldCoord <- Ref.read coordRef
+              Coord.stop oldCoord
               c <- Coord.create
               Ref.write c coordRef
               _ <- Coord.register c
@@ -486,18 +557,28 @@ runWASMSimulation config = do
             WASMSetup.reheat sim
             Ref.write 1.0 alphaRef
             Emitter.emit emitterHandle Started
+
+        -- Position interpolation not yet implemented for WASM engine.
+        -- ForcePlayground uses D3 engine, so this is low priority.
+        , interpolatePositions: \_ _ _ -> pure unit
+
+        , pinNodes: pure unit
+
+        , unpinNodes: pure unit
         }
     }
 
 -- | Render WASM nodes using PSD3
 -- | Uses updateJoin with a key function based on node.id for proper identity matching.
 -- | Uses renderTreeKeyed which doesn't require Ord on the datum type.
+-- |
+-- | When `config.renderNodes` is false, this function is a no-op.
 renderWASMNodes
   :: forall r
    . SimulationConfig r
   -> WASMSetup.WASMSim r
   -> Effect Unit
-renderWASMNodes config sim = do
+renderWASMNodes config sim = when config.renderNodes do
   nodes <- WASMSetup.getNodes sim
   container <- Ops.select config.container
   void $ renderTreeKeyed container (A.updateJoin "sim-nodes" config.nodeElement nodes config.nodeTemplate

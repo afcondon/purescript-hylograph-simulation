@@ -617,6 +617,12 @@ applySetupWithData setupConfig desiredNodes desiredLinks sim = do
   -- Write merged nodes to simulation
   Ref.write nodeResult.merged sim.nodes
 
+  -- CRITICAL: Initialize node positions for any nodes that don't have them yet.
+  -- D3 forces require nodes to have x, y, vx, vy for collision detection and
+  -- force calculations to work. Without this, entered nodes have no positions
+  -- and forces (especially collision) don't work.
+  Core.initializeNodes nodeResult.merged
+
   -- Compute link GUP
   let linkResult = computeLinkGUP currentLinks desiredLinks
 

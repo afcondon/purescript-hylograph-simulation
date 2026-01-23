@@ -76,7 +76,7 @@ main = launchAff_ do
       , container: "#d3-sim"
       , nodeElement: "circle"
       , nodeTemplate: nodeTemplate "#06b6d4"
-      , alphaMin: 0.001
+      , alphaMin: 0.001, renderNodes: true
       }
 
     case d3Result of
@@ -102,7 +102,7 @@ main = launchAff_ do
       , container: "#wasm-sim"
       , nodeElement: "circle"
       , nodeTemplate: nodeTemplate "#f97316"
-      , alphaMin: 0.001
+      , alphaMin: 0.001, renderNodes: true
       }
 
     case wasmResult of
