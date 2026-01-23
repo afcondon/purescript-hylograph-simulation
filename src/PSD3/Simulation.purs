@@ -20,6 +20,7 @@
 -- |     , nodes: myNodes
 -- |     , links: []
 -- |     , container: "#my-svg"
+-- |     , nodeElement: "circle"  -- or "g" for group nodes with children
 -- |     , nodeTemplate: \_ -> A.elem Circle [...]
 -- |     , alphaMin: 0.001
 -- |     }
@@ -65,13 +66,15 @@ module PSD3.Simulation
 import Prelude
 
 import Data.Array as Array
+import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Ref as Ref
 
 -- PSD3 Visualization
 import PSD3.AST as A
-import PSD3.Render (runD3, select, renderTree)
+import PSD3.Internal.Selection.Operations as Ops
+import PSD3.Internal.Selection.Operations (renderTreeKeyed)
 
 -- Coordinator
 import PSD3.Transition.Coordinator as Coord
@@ -128,16 +131,40 @@ import PSD3.ForceEngine.Simulation (SimulationNode) as SimNodeExports
 -- | Physics engine selection
 data Engine = D3 | WASM
 
+-- | Internal wrapper for nodes that provides Eq/Ord based on id only.
+-- | This is essential for the data join to work correctly with simulation nodes
+-- | where x/y positions change every tick but identity should be by id.
+data KeyedNode r = KeyedNode Int (D3Sim.SimulationNode r)
+
+instance eqKeyedNode :: Eq (KeyedNode r) where
+  eq (KeyedNode id1 _) (KeyedNode id2 _) = id1 == id2
+
+instance ordKeyedNode :: Ord (KeyedNode r) where
+  compare (KeyedNode id1 _) (KeyedNode id2 _) = compare id1 id2
+
+-- | Wrap a simulation node for keyed rendering
+keyNode :: forall r. D3Sim.SimulationNode r -> KeyedNode r
+keyNode n = KeyedNode n.id n
+
+-- | Unwrap a keyed node to get the underlying simulation node
+unkeyNode :: forall r. KeyedNode r -> D3Sim.SimulationNode r
+unkeyNode (KeyedNode _ n) = n
+
 -- | Configuration for running a simulation
 -- |
 -- | Note: There's no `onComplete` callback - use the `events` emitter instead.
 -- | This keeps the API framework-agnostic.
+-- |
+-- | The `nodeElement` field specifies the SVG element type for the data join:
+-- | - Use `"circle"` when nodeTemplate returns `A.elem Circle [...]`
+-- | - Use `"g"` when nodeTemplate returns `A.elem Group [...]` (for composite nodes)
 type SimulationConfig r =
   { engine :: Engine
   , setup :: D3Setup.Setup (D3Sim.SimulationNode r)
   , nodes :: Array (D3Sim.SimulationNode r)
   , links :: Array { source :: Int, target :: Int }
   , container :: String  -- CSS selector for SVG container
+  , nodeElement :: String -- SVG element type for join ("circle", "g", etc.)
   , nodeTemplate :: D3Sim.SimulationNode r -> A.Tree (D3Sim.SimulationNode r)
   , alphaMin :: Number   -- Convergence threshold (default: 0.001)
   }
@@ -201,12 +228,12 @@ initWASM = WASMSetup.initWasm
 -- | - The emitter works with Halogen, React, or vanilla JS
 -- | - Events include Tick, Started, Stopped, and Completed
 -- | - The same code works for both D3 and WASM engines
--- |
--- | Note: The node type must have an Ord instance for data join rendering.
+-- | Note: No Ord constraint required! We use renderTreeKeyed with a key function
+-- | based on node.id, which doesn't require Ord on the datum type. This allows
+-- | SimulationNode r (an extensible record) to work without needing Ord derivation.
 runSimulation
   :: forall r
-   . Ord (D3Sim.SimulationNode r)
-  => SimulationConfig r
+   . SimulationConfig r
   -> Effect (SimulationResult r)
 runSimulation config = case config.engine of
   D3 -> runD3Simulation config
@@ -218,8 +245,7 @@ runSimulation config = case config.engine of
 
 runD3Simulation
   :: forall r
-   . Ord (D3Sim.SimulationNode r)
-  => SimulationConfig r
+   . SimulationConfig r
   -> Effect (SimulationResult r)
 runD3Simulation config = do
   -- Create emitter for events
@@ -340,17 +366,24 @@ d3Consumer sim emitterHandle alphaRef alphaMin onTick _deltaMs = do
     else Coord.Converged alpha
 
 -- | Render nodes using PSD3
+-- | Uses updateJoin with a key function based on node.id for proper identity matching.
+-- | This ensures the data join matches nodes by id rather than comparing all fields,
+-- | which is essential because x/y positions change on every tick.
+-- | Uses renderTreeKeyed which doesn't require Ord on the datum type.
 renderNodes
   :: forall r
-   . Ord (D3Sim.SimulationNode r)
-  => SimulationConfig r
+   . SimulationConfig r
   -> D3Sim.Simulation r ()
   -> Effect Unit
 renderNodes config sim = do
   nodes <- D3Sim.getNodes sim
-  void $ runD3 do
-    container <- select config.container
-    renderTree container (A.joinData "sim-nodes" "circle" nodes config.nodeTemplate)
+  container <- Ops.select config.container
+  void $ renderTreeKeyed container (A.updateJoin "sim-nodes" config.nodeElement nodes config.nodeTemplate
+    { enter: Nothing
+    , update: Nothing
+    , exit: Nothing
+    , keyFn: Just (\n -> show n.id)
+    })
 
 -- =============================================================================
 -- WASM Engine Implementation
@@ -358,8 +391,7 @@ renderNodes config sim = do
 
 runWASMSimulation
   :: forall r
-   . Ord (D3Sim.SimulationNode r)
-  => SimulationConfig r
+   . SimulationConfig r
   -> Effect (SimulationResult r)
 runWASMSimulation config = do
   -- Create emitter for events
@@ -458,17 +490,22 @@ runWASMSimulation config = do
     }
 
 -- | Render WASM nodes using PSD3
+-- | Uses updateJoin with a key function based on node.id for proper identity matching.
+-- | Uses renderTreeKeyed which doesn't require Ord on the datum type.
 renderWASMNodes
   :: forall r
-   . Ord (D3Sim.SimulationNode r)
-  => SimulationConfig r
+   . SimulationConfig r
   -> WASMSetup.WASMSim r
   -> Effect Unit
 renderWASMNodes config sim = do
   nodes <- WASMSetup.getNodes sim
-  void $ runD3 do
-    container <- select config.container
-    renderTree container (A.joinData "sim-nodes" "circle" nodes config.nodeTemplate)
+  container <- Ops.select config.container
+  void $ renderTreeKeyed container (A.updateJoin "sim-nodes" config.nodeElement nodes config.nodeTemplate
+    { enter: Nothing
+    , update: Nothing
+    , exit: Nothing
+    , keyFn: Just (\n -> show n.id)
+    })
 
 -- | WASM consumer for coordinator - emits Tick events
 wasmConsumer

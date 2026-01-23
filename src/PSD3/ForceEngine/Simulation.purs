@@ -112,6 +112,7 @@ import Data.Tuple (Tuple(..))
 import Data.Nullable (Nullable)
 import Foreign.Object (Object)
 import Effect (Effect)
+import Effect.Console (log)
 import Type.Row (type (+))
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
@@ -424,6 +425,9 @@ tick sim = do
 
   -- Apply all forces
   let forceHandles = Array.fromFoldable $ Map.values forces
+  let forceNames = Array.fromFoldable $ Map.keys forces
+  when (alpha > 0.99) do
+    log $ "[tick] Forces in sim: " <> show (Array.length forceHandles) <> " - " <> show forceNames
   Core.applyForces forceHandles alpha
 
   -- Integrate positions

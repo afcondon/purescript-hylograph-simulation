@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Circle Pack + Force Demo</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f0f1a;
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #ffffff;
+    }
+
+    .subtitle {
+      font-size: 0.875rem;
+      color: #888;
+      margin-bottom: 20px;
+    }
+
+    .info-panel {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+      font-size: 0.875rem;
+    }
+
+    .info-panel code {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'SF Mono', Monaco, monospace;
+    }
+
+    .status {
+      display: flex;
+      gap: 16px;
+      margin-top: 12px;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #666;
+    }
+
+    .status-dot.active {
+      background: #4ade80;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    #circle-pack-container {
+      background: #1a1a2e;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .legend {
+      display: flex;
+      gap: 24px;
+      margin-top: 16px;
+      font-size: 0.875rem;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .legend-swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 2px solid;
+    }
+
+    .legend-swatch.workspace {
+      background: rgba(74, 158, 255, 0.15);
+      border-color: #7cb8ff;
+    }
+
+    .legend-swatch.extra {
+      background: rgba(255, 159, 67, 0.15);
+      border-color: #ffb870;
+    }
+
+    .legend-swatch.registry {
+      background: rgba(108, 117, 125, 0.15);
+      border-color: #9a9a9a;
+    }
+
+    /* Package bubble hover effects */
+    .package-bubble:hover circle {
+      fill-opacity: 0.3;
+      stroke-opacity: 1;
+    }
+
+    .package-bubble:hover text {
+      fill: #ffffff;
+    }
+
+    /* Module circles (when rendered) */
+    .module-circle {
+      fill: rgba(255, 255, 255, 0.6);
+      stroke: rgba(255, 255, 255, 0.8);
+      stroke-width: 0.5;
+    }
+
+    .module-circle:hover {
+      fill: rgba(255, 255, 255, 0.9);
+      stroke-width: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Circle Pack + Force Demo</h1>
+    <p class="subtitle">Packages as force-positioned bubbles with circle-packed modules inside</p>
+
+    <div class="info-panel">
+      <strong>Data Source:</strong> <code>localhost:3000</code> (ce-server API)
+      <br><br>
+      <strong>Libraries Used:</strong>
+      <ul style="margin-top: 8px; margin-left: 20px;">
+        <li><code>psd3-layout</code> - Circle packing algorithm (packSiblingsMap)</li>
+        <li><code>psd3-simulation</code> - Force-directed positioning</li>
+        <li><code>PSD3.AST</code> - Declarative rendering</li>
+      </ul>
+      <div class="status">
+        <div class="status-item">
+          <div class="status-dot" id="api-status"></div>
+          <span>API</span>
+        </div>
+        <div class="status-item">
+          <div class="status-dot" id="pack-status"></div>
+          <span>Packing</span>
+        </div>
+        <div class="status-item">
+          <div class="status-dot" id="sim-status"></div>
+          <span>Simulation</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="circle-pack-container">
+      <!-- SVG will be rendered here by PSD3 -->
+    </div>
+
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-swatch workspace"></div>
+        <span>Workspace packages</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch extra"></div>
+        <span>Extra packages</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch registry"></div>
+        <span>Registry packages</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- D3.js -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+
+  <!-- Bundle (to be built) -->
+  <script src="circle-pack-bundle.js"></script>
+
+  <script>
+    // Status indicator helpers
+    window.setStatus = function(id, active) {
+      const dot = document.getElementById(id + '-status');
+      if (dot) {
+        dot.classList.toggle('active', active);
+      }
+    };
+
+    // Log interceptor to update status
+    const originalLog = console.log;
+    console.log = function(...args) {
+      originalLog.apply(console, args);
+      const msg = args.join(' ');
+      if (msg.includes('Fetching')) window.setStatus('api', true);
+      if (msg.includes('Prepared')) window.setStatus('pack', true);
+      if (msg.includes('started') || msg.includes('converged')) window.setStatus('sim', true);
+    };
+  </script>
+</body>
+</html>

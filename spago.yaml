@@ -6,6 +6,8 @@ workspace:
       path: ../purescript-psd3-graph
     psd3-selection:
       path: ../purescript-psd3-selection
+    psd3-layout:
+      path: ../purescript-psd3-layout
 
 package:
   name: psd3-simulation
@@ -42,3 +44,8 @@ package:
     dependencies:
       - assert
       - nullable
+      - psd3-layout
+      - affjax
+      - affjax-web
+      - argonaut
+      - argonaut-codecs

@@ -74,6 +74,7 @@ main = launchAff_ do
       , nodes: initialNodes 150.0
       , links: []
       , container: "#d3-sim"
+      , nodeElement: "circle"
       , nodeTemplate: nodeTemplate "#06b6d4"
       , alphaMin: 0.001
       }
@@ -99,6 +100,7 @@ main = launchAff_ do
       , nodes: initialNodes 350.0
       , links: []
       , container: "#wasm-sim"
+      , nodeElement: "circle"
       , nodeTemplate: nodeTemplate "#f97316"
       , alphaMin: 0.001
       }

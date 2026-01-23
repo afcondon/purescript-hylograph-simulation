@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>High-Level API Test</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 20px;
+      background: #1a1a2e;
+      color: #eee;
+    }
+    h1 {
+      color: #4a9eff;
+      margin-bottom: 10px;
+    }
+    h2 {
+      color: #888;
+      font-size: 14px;
+      font-weight: normal;
+      margin-bottom: 30px;
+    }
+    .test-section {
+      margin-bottom: 30px;
+      padding: 20px;
+      background: #16213e;
+      border-radius: 8px;
+    }
+    .test-section h3 {
+      margin-top: 0;
+      color: #4a9eff;
+      font-size: 14px;
+    }
+    .sim-container {
+      background: #0d1b2a;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .sim-container svg {
+      display: block;
+    }
+    .sim-label {
+      font-size: 11px;
+      color: #666;
+      margin: 0 0 8px 0;
+    }
+    #status {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #16213e;
+      padding: 15px 20px;
+      border-radius: 8px;
+      font-size: 12px;
+      max-width: 300px;
+    }
+    #status h4 {
+      margin: 0 0 10px 0;
+      color: #4a9eff;
+    }
+    #console {
+      font-family: monospace;
+      font-size: 11px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    #console div {
+      padding: 2px 0;
+      border-bottom: 1px solid #333;
+    }
+    .log-complete {
+      color: #22c55e;
+    }
+    .api-note {
+      background: #0f1729;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .api-note code {
+      background: #1a2744;
+      padding: 2px 6px;
+      border-radius: 3px;
+      color: #4a9eff;
+    }
+    pre {
+      background: #0d1b2a;
+      padding: 15px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <h1>High-Level API Test</h1>
+  <h2>runSimulation: One config record, two engines</h2>
+
+  <div class="api-note">
+    <strong>The Simplified API:</strong>
+    <pre>handle <- runSimulation
+  { engine: D3  -- or WASM (same config!)
+  , setup: setup "physics" [manyBody "charge", center "center"]
+  , nodes: myNodes
+  , links: []
+  , container: "#my-svg"
+  , nodeTemplate: \_ -> elem Circle [...]
+  , onComplete: log "done"
+  , alphaMin: 0.001
+  }</pre>
+    That's it! No coordinator setup, no consumer registration, no manual rendering.
+  </div>
+
+  <div class="test-section">
+    <h3>D3 Engine</h3>
+    <p class="sim-label">6 cyan nodes - using D3.js physics</p>
+    <div class="sim-container">
+      <svg id="d3-sim" width="400" height="150"></svg>
+    </div>
+  </div>
+
+  <div class="test-section">
+    <h3>WASM Engine</h3>
+    <p class="sim-label">6 orange nodes - using Rust/WASM physics</p>
+    <div class="sim-container">
+      <svg id="wasm-sim" width="400" height="150"></svg>
+    </div>
+  </div>
+
+  <div id="status">
+    <h4>Console Output</h4>
+    <div id="console"></div>
+  </div>
+
+  <script>
+    // Capture console.log to display in page
+    const consoleDiv = document.getElementById('console');
+    const originalLog = console.log;
+    console.log = function(...args) {
+      originalLog.apply(console, args);
+      const msg = args.join(' ');
+      const div = document.createElement('div');
+      div.textContent = msg;
+      if (msg.includes('✓') || msg.includes('complete') || msg.includes('converged')) {
+        div.className = 'log-complete';
+      }
+      consoleDiv.appendChild(div);
+      consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    };
+  </script>
+
+  <script src="./high-level-bundle.js"></script>
+</body>
+</html>

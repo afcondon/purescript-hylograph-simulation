@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Group Node Test</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 20px;
+      background: #1a1a2e;
+      color: #eee;
+    }
+    h1 {
+      color: #4a9eff;
+      margin-bottom: 10px;
+    }
+    h2 {
+      color: #888;
+      font-size: 14px;
+      font-weight: normal;
+      margin-bottom: 30px;
+    }
+    .test-section {
+      margin-bottom: 20px;
+      padding: 15px;
+      background: #16213e;
+      border-radius: 8px;
+      display: inline-block;
+      margin-right: 20px;
+      vertical-align: top;
+    }
+    .test-section h3 {
+      margin-top: 0;
+      color: #4a9eff;
+      font-size: 14px;
+    }
+    .test-section p {
+      font-size: 11px;
+      color: #888;
+      margin: 5px 0 10px 0;
+    }
+    .sim-container {
+      background: #0d1b2a;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .sim-container svg {
+      display: block;
+    }
+    #status {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #16213e;
+      padding: 15px 20px;
+      border-radius: 8px;
+      font-size: 12px;
+      max-width: 400px;
+    }
+    #status h4 {
+      margin: 0 0 10px 0;
+      color: #4a9eff;
+    }
+    #console {
+      font-family: monospace;
+      font-size: 11px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    #console div {
+      padding: 2px 0;
+      border-bottom: 1px solid #333;
+    }
+    .log-complete {
+      color: #22c55e;
+    }
+    .log-error {
+      color: #ef4444;
+    }
+  </style>
+</head>
+<body>
+  <h1>Group Node Test</h1>
+  <h2>Testing nodeElement: "g" with transform vs nodeElement: "circle" with cx/cy</h2>
+
+  <div class="test-section">
+    <h3>Test 1: Group + Transform</h3>
+    <p>nodeElement: "g", uses transform attr<br>Forces: manyBody + center</p>
+    <div class="sim-container">
+      <svg id="test1" width="300" height="200"></svg>
+    </div>
+  </div>
+
+  <div class="test-section">
+    <h3>Test 2: Circle + cx/cy</h3>
+    <p>nodeElement: "circle", uses cx/cy attrs<br>Forces: manyBody + center</p>
+    <div class="sim-container">
+      <svg id="test2" width="300" height="200"></svg>
+    </div>
+  </div>
+
+  <div class="test-section">
+    <h3>Test 3: Dynamic positionX</h3>
+    <p>nodeElement: "circle", dynamic _.targetX<br>Forces: positionX + collide</p>
+    <div class="sim-container">
+      <svg id="test3" width="300" height="200"></svg>
+    </div>
+  </div>
+
+  <div id="status">
+    <h4>Console Output</h4>
+    <div id="console"></div>
+  </div>
+
+  <script>
+    // Capture console.log to display in page
+    const consoleDiv = document.getElementById('console');
+    const originalLog = console.log;
+    const originalError = console.error;
+
+    console.log = function(...args) {
+      originalLog.apply(console, args);
+      const msg = args.join(' ');
+      const div = document.createElement('div');
+      div.textContent = msg;
+      if (msg.includes('✓') || msg.includes('complete')) {
+        div.className = 'log-complete';
+      }
+      consoleDiv.appendChild(div);
+      consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    };
+
+    console.error = function(...args) {
+      originalError.apply(console, args);
+      const msg = args.join(' ');
+      const div = document.createElement('div');
+      div.textContent = 'ERROR: ' + msg;
+      div.className = 'log-error';
+      consoleDiv.appendChild(div);
+      consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    };
+  </script>
+
+  <script src="./group-node-bundle.js"></script>
+</body>
+</html>

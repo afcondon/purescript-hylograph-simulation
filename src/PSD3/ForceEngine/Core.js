@@ -30,6 +30,7 @@ export function createManyBody_(config) {
 // Create a collision force
 // Note: radius and strength can be numbers or functions
 export function createCollide_(config) {
+  console.log('[createCollide_] STATIC radius:', config.radius, 'strength:', config.strength);
   const force = forceCollide()
     .radius(config.radius)
     .strength(config.strength)
@@ -39,6 +40,7 @@ export function createCollide_(config) {
 
 // Create a collision force with dynamic radius function
 export function createCollideWithRadius_(radiusFn) {
+  console.log('[createCollideWithRadius_] Called');
   return function(strength) {
     return function(iterations) {
       const force = forceCollide()
@@ -133,10 +135,17 @@ export function createRadialFiltered_(config) {
 
 // Create a collision force with dynamic radius accessor
 // radiusAccessor is called per-node to get collision radius
+let collideDebugCount = 0;
 export function createCollideDynamic_(config) {
+  console.warn('🔴🔴🔴 COLLIDE DYNAMIC CREATED 🔴🔴🔴 strength:', config.strength);
   const force = forceCollide()
     .radius(function(d) {
-      return config.radiusAccessor(d);
+      const r = config.radiusAccessor(d);
+      if (collideDebugCount < 3) {
+        console.warn(`🔴 Collide radius called: node ${d.id} (${d.pkg?.name || d.name || '?'}) r=${r}`);
+        collideDebugCount++;
+      }
+      return r;
     })
     .strength(config.strength)
     .iterations(config.iterations);
@@ -193,8 +202,10 @@ export function createForceYGrid_(strength) {
 // Create collision force that reads node.r directly (no PureScript callback)
 // Adds padding to node radius
 export function createCollideGrid_(padding) {
+  console.log('[createCollideGrid_] padding:', padding);
   return function(strength) {
     return function(iterations) {
+      console.log('[createCollideGrid_] strength:', strength, 'iterations:', iterations);
       return forceCollide()
         .radius(d => d.r + padding)
         .strength(strength)
@@ -213,14 +224,15 @@ export function createCollideGrid_(padding) {
 export function initializeForce_(force) {
   return function(nodes) {
     return function() {
+      const forceStr = force.toString().substring(0, 30);
+      console.warn(`🟢 initializeForce: ${nodes.length} nodes, force=${forceStr}`);
       const start = performance.now();
       if (force.initialize) {
         force.initialize(nodes, Math.random);
+      } else {
+        console.warn('🟡 Force has no initialize method!');
       }
       const elapsed = performance.now() - start;
-      if (elapsed > 1) {
-        console.log(`[InitForce] Took ${elapsed.toFixed(1)}ms for ${nodes.length} nodes`);
-      }
       return force;
     };
   };
@@ -252,16 +264,16 @@ export function initializeLinkForce_(force) {
 
 // Apply a force to nodes
 // This is the core calculation - it mutates vx/vy on nodes
+let applyForceLogCount = 0;
 export function applyForce_(force) {
   return function(alpha) {
     return function() {
-      // D3 forces are callable - force(alpha) applies the force
-      const start = performance.now();
+      if (applyForceLogCount < 15) {
+        const forceStr = force.toString().substring(0, 50);
+        console.warn(`🟣 applyForce: alpha=${alpha.toFixed(3)}, force=${forceStr}`);
+        applyForceLogCount++;
+      }
       force(alpha);
-      const elapsed = performance.now() - start;
-      // if (elapsed > 5) {
-      //   console.log(`[Force] ${force.name || 'unknown'} took ${elapsed.toFixed(1)}ms`);
-      // }
     };
   };
 }

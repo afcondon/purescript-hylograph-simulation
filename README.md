@@ -1,5 +1,7 @@
 # purescript-psd3-simulation
 
+[![Force Playground Demo](../../site/lib-simulation/public/demo.jpeg)](/#/force-playground)
+
 Force-directed graph simulation with unified D3 and WASM engine support.
 
 ## Quick Start
