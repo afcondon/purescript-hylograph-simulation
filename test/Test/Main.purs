@@ -7,6 +7,7 @@ import Effect.Console (log)
 import Test.Transition.TickSpec as TickSpec
 import Test.Scene.RulesSpec as RulesSpec
 import Test.Config.ForceSpec as ForceSpec
+import Test.ForceEngine.LinksSpec as LinksSpec
 
 main :: Effect Unit
 main = do
@@ -23,5 +24,8 @@ main = do
 
   log "\n=== Config/Force Tests ==="
   ForceSpec.runTests
+
+  log "\n=== ForceEngine/Links Tests ==="
+  LinksSpec.runTests
 
   log "\n=== All tests passed! ==="

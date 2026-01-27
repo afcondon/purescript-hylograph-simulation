@@ -85,13 +85,22 @@ foreign import stringSetMember :: String -> StringSet -> Boolean
 
 -- | Convert raw links (integer indices) to swizzled links (node references)
 -- |
--- | ASSUMES: link.source and link.target are valid array indices into nodes.
--- | Use this when your nodes array is the full set (not filtered).
+-- | **WARNING: UNSAFE with filtered node subsets.**
+-- |
+-- | This function assumes `link.source` and `link.target` are valid *array indices*
+-- | into the `nodes` array. It will crash if any link references an index >= nodes.length.
+-- |
+-- | This assumption breaks when:
+-- | - Nodes have been filtered (e.g., showing only visible nodes)
+-- | - Link indices are *semantic* (node.index field values) rather than array positions
+-- |
+-- | For filtered subsets, use `swizzleLinksByIndex` instead, which looks up nodes
+-- | by their `.index` field and safely drops links where endpoints aren't found.
 -- |
 -- | The transform function allows you to build the output link record,
 -- | copying extra fields from the raw link as needed.
 -- |
--- | Example:
+-- | Example (full node set only):
 -- | ```purescript
 -- | let swizzled = swizzleLinks nodes rawLinks \src tgt i link ->
 -- |       { source: src, target: tgt, index: i, value: link.value }

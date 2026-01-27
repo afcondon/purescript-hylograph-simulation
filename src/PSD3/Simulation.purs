@@ -272,8 +272,13 @@ runD3Simulation config = do
   -- Create emitter for events
   { emitter, handle: emitterHandle } <- Emitter.create
 
-  -- Create simulation
-  sim <- D3Sim.create D3Sim.defaultConfig
+  -- Create simulation with alphaDecay from setup
+  -- This is important because sim.config is immutable after creation
+  let simConfig = D3Sim.defaultConfig
+        { alphaDecay = config.setup.params.alphaDecay
+        , alphaMin = config.alphaMin
+        }
+  sim <- D3Sim.create simConfig
 
   -- Apply initial setup with data
   _ <- D3Setup.applySetupWithData config.setup config.nodes config.links sim
@@ -320,6 +325,23 @@ runD3Simulation config = do
             Ref.write 1.0 alphaRef
             Emitter.emit emitterHandle Started
             renderNodes config sim
+            -- Restart coordinator if simulation has completed
+            running <- Ref.read runningRef
+            unless running do
+              Ref.write true runningRef
+              -- Stop old coordinator and create new one
+              oldCoord <- Ref.read coordRef
+              Coord.stop oldCoord
+              c <- Coord.create
+              Ref.write c coordRef
+              _ <- Coord.register c
+                { tick: d3Consumer sim emitterHandle alphaRef config.alphaMin do
+                    renderNodes config sim
+                , onComplete: do
+                    Ref.write false runningRef
+                    Emitter.emit emitterHandle Completed
+                }
+              Coord.start c
             pure result
 
         , updateSetup: \newSetup -> do
@@ -496,6 +518,23 @@ runWASMSimulation config = do
             Ref.write 1.0 alphaRef
             Emitter.emit emitterHandle Started
             renderWASMNodes config sim
+            -- Restart coordinator if simulation has completed
+            running <- Ref.read runningRef
+            unless running do
+              Ref.write true runningRef
+              -- Stop old coordinator and create new one
+              oldCoord <- Ref.read coordRef
+              Coord.stop oldCoord
+              c <- Coord.create
+              Ref.write c coordRef
+              _ <- Coord.register c
+                { tick: wasmConsumer sim emitterHandle alphaRef config.alphaMin do
+                    renderWASMNodes config sim
+                , onComplete: do
+                    Ref.write false runningRef
+                    Emitter.emit emitterHandle Completed
+                }
+              Coord.start c
             pure result
 
         , updateSetup: \newSetup -> do
