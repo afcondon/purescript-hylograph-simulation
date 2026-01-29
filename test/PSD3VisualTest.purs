@@ -21,23 +21,23 @@ import Effect.Class (liftEffect)
 import Effect.Console (log)
 
 -- PSD3 Visualization
-import PSD3.AST as A
-import PSD3.Render (runD3, select, renderTree)
-import PSD3.Unified.Attribute as Attr
-import PSD3.Unified.Display (showNumD)
-import PSD3.Internal.Selection.Types (ElementType(..))
+import Hylograph.AST as A
+import Hylograph.Render (runD3, select, renderTree)
+import Hylograph.Unified.Attribute as Attr
+import Hylograph.Unified.Display (showNumD)
+import Hylograph.Internal.Selection.Types (ElementType(..))
 
 -- Coordinator and Consumers
-import PSD3.Transition.Coordinator (Coordinator, Milliseconds, TickResult(..), create, register, start) as C
-import PSD3.Transition.Consumers (simulationConsumer)
+import Hylograph.Transition.Coordinator (Coordinator, Milliseconds, TickResult(..), create, register, start) as C
+import Hylograph.Transition.Consumers (simulationConsumer)
 
 -- Force simulation with declarative setup (D3 engine)
-import PSD3.ForceEngine.Simulation as Sim
-import PSD3.ForceEngine.Setup as Setup
-import PSD3.ForceEngine.Setup (setup, manyBody, center, withStrength, withX, withY, static)
+import Hylograph.ForceEngine.Simulation as Sim
+import Hylograph.ForceEngine.Setup as Setup
+import Hylograph.ForceEngine.Setup (setup, manyBody, center, withStrength, withX, withY, static)
 
 -- WASM simulation with SAME Setup API (functional parity!)
-import PSD3.ForceEngine.Setup.WASM as WASMSetup
+import Hylograph.ForceEngine.Setup.WASM as WASMSetup
 
 -- =============================================================================
 -- Shared Types

@@ -18,8 +18,8 @@ import Effect.Console (log)
 import Test.Assert (assert')
 
 -- Import the module under test
-import PSD3.Scene.Rules as Rules
-import PSD3.Scene.Types (NodeRule)
+import Hylograph.Scene.Rules as Rules
+import Hylograph.Scene.Types (NodeRule)
 
 -- =============================================================================
 -- Test Node Type

@@ -18,7 +18,7 @@ import Effect.Console (log)
 import Test.Assert (assert')
 
 -- Import the module under test
-import PSD3.Transition.Tick as Tick
+import Hylograph.Transition.Tick as Tick
 
 -- =============================================================================
 -- Tests

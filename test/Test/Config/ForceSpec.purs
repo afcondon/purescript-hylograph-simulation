@@ -17,7 +17,7 @@ import Effect.Console (log)
 import Test.Assert (assert')
 
 -- Import the module under test
-import PSD3.Config.Force as Force
+import Hylograph.Config.Force as Force
 
 -- =============================================================================
 -- Helper to extract static value

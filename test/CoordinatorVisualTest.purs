@@ -14,13 +14,13 @@ import Effect.Aff (launchAff_)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Ref as Ref
-import PSD3.Transition.Coordinator (Coordinator, Milliseconds, TickResult(..), create, register, start) as C
-import PSD3.Transition.Consumers (transitionConsumer, transitionGroupConsumer, simulationConsumer)
-import PSD3.Transition.Engine as E
-import PSD3.Transition.Easing (EasingType(..))
-import PSD3.Transition.Tick (lerp)
-import PSD3.ForceEngine.Simulation as Sim
-import PSD3.ForceEngine.Types (ForceSpec(..), defaultManyBody, defaultCenter)
+import Hylograph.Transition.Coordinator (Coordinator, Milliseconds, TickResult(..), create, register, start) as C
+import Hylograph.Transition.Consumers (transitionConsumer, transitionGroupConsumer, simulationConsumer)
+import Hylograph.Transition.Engine as E
+import Hylograph.Transition.Easing (EasingType(..))
+import Hylograph.Transition.Tick (lerp)
+import Hylograph.ForceEngine.Simulation as Sim
+import Hylograph.ForceEngine.Types (ForceSpec(..), defaultManyBody, defaultCenter)
 import Test.WASMSimulation as WASM
 
 -- =============================================================================

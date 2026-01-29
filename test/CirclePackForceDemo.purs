@@ -2,12 +2,11 @@
 -- |
 -- | Demonstrates:
 -- | - Fetching data from backend API (packages + modules)
--- | - Using psd3-layout's packSiblingsMap for circle packing within packages
--- | - Using psd3-simulation for force-directed positioning of packages
--- | - Declarative rendering with PSD3 AST
+-- | - Using hylograph-layout's packSiblingsMap for circle packing within packages
+-- | - Using hylograph-simulation for force-directed positioning of packages
 -- |
--- | Packages are shown as large circles containing packed module circles.
--- | Force simulation positions packages to avoid overlap.
+-- | Note: Rendering is now handled externally (via HATS or any other approach).
+-- | This test focuses on the simulation physics - it logs node positions.
 module Test.CirclePackForceDemo where
 
 import Prelude
@@ -32,13 +31,8 @@ import Effect.Aff (Aff, launchAff_)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 
--- PSD3 Imports
-import PSD3.AST as A
-import PSD3.Internal.Selection.Types (ElementType(..))
-import PSD3.Unified.Attribute as Attr
-import PSD3.Unified.Display (showNumD, idD)
-import PSD3.Render (runD3, select, renderTree)
-import PSD3.Simulation
+-- Hylograph Simulation
+import Hylograph.Simulation
   ( runSimulation
   , Engine(..)
   , SimulationEvent(..)
@@ -54,9 +48,9 @@ import PSD3.Simulation
   , static
   , dynamic
   )
-import PSD3.ForceEngine.Simulation (SimulationNode)
+import Hylograph.ForceEngine.Simulation (SimulationNode)
 
--- Circle packing from psd3-layout
+-- Circle packing from hylograph-layout
 import DataViz.Layout.Hierarchy.Pack (packSiblingsMap, Circle)
 
 -- =============================================================================
@@ -197,7 +191,7 @@ createPackedPackage idx (APIPackage pkg) modules =
       , r: 5.0 + sqrt (toNumber (String.length m.name)) * 1.5
       }
 
-    -- Pack the modules using psd3-layout
+    -- Pack the modules using hylograph-layout
     packed = packSiblingsMap moduleCircles
 
     -- Convert to ModuleCircle with IDs
@@ -252,12 +246,10 @@ preparePackages packages modules =
 -- =============================================================================
 
 -- | Start the force simulation
+-- | Note: Rendering is handled externally - this just runs the physics
 startSimulation :: Array PackageNode -> Effect Unit
 startSimulation nodes = do
-  -- Create SVG container
-  renderSVGContainer "#circle-pack-container"
-
-  { handle: _, events } <- runSimulation
+  { handle, events } <- runSimulation
     { engine: D3
     , setup: setup "circle-pack"
         [ manyBody "charge" # withStrength (static (-30.0))
@@ -267,105 +259,25 @@ startSimulation nodes = do
     , nodes: nodes
     , links: []
     , container: "#packages-group"
-    , nodeElement: "g"
-    , nodeTemplate: packageNodeTemplate
-    , alphaMin: 0.001, renderNodes: true
+    , alphaMin: 0.001
     }
 
   -- Subscribe to events
   _ <- subscribe events \event -> case event of
-    Completed -> log "[CirclePackDemo] Simulation converged"
+    Tick _ -> do
+      -- In real usage, render nodes here using HATS
+      -- currentNodes <- handle.getNodes
+      -- renderNodes currentNodes
+      pure unit
+    Completed -> do
+      log "[CirclePackDemo] Simulation converged"
+      -- Log final positions
+      finalNodes <- handle.getNodes
+      log $ "[CirclePackDemo] Final node positions: " <> show (Array.length finalNodes) <> " nodes"
     Started -> log "[CirclePackDemo] Simulation started"
     _ -> pure unit
 
   pure unit
-
--- | Create the SVG container
-renderSVGContainer :: String -> Effect Unit
-renderSVGContainer containerSelector = do
-  void $ runD3 do
-    container <- select containerSelector
-    let svgTree :: A.Tree Unit
-        svgTree =
-          A.named SVG "circle-pack-svg"
-            [ Attr.attrStatic "id" "circle-pack-svg"
-            , Attr.attrStatic "viewBox" "-600 -400 1200 800"
-            , Attr.attrStatic "width" "100%"
-            , Attr.attrStatic "height" "700"
-            , Attr.attrStatic "style" "background: #1a1a2e; border-radius: 8px;"
-            ]
-          `A.withChildren`
-            [ A.named Group "packages-group"
-                [ Attr.attrStatic "id" "packages-group"
-                , Attr.attrStatic "class" "packages"
-                ]
-            ]
-    renderTree container svgTree
-
--- | Package node template with nested module circles
-packageNodeTemplate :: PackageNode -> A.Tree PackageNode
-packageNodeTemplate node =
-  A.elem Group
-    [ Attr.attr "transform" (\n -> "translate(" <> show n.x <> "," <> show n.y <> ")") idD
-    , Attr.attrStatic "class" "package-bubble"
-    ]
-  `A.withChildren`
-    ( [ -- Package enclosing circle (rendered first, behind modules)
-        A.elem Circle
-          [ Attr.attrStatic "cx" "0"
-          , Attr.attrStatic "cy" "0"
-          , Attr.attr "r" _.r showNumD
-          , Attr.attr "fill" (\n -> packageFill n.source) idD
-          , Attr.attrStatic "fill-opacity" "0.1"
-          , Attr.attr "stroke" (\n -> packageStroke n.source) idD
-          , Attr.attrStatic "stroke-width" "2"
-          , Attr.attrStatic "stroke-opacity" "0.4"
-          ]
-      ]
-      -- Module circles - generated from node.modules using attrStatic
-      <> map toModuleCircle node.modules
-      <>
-      [ -- Package label (on top)
-        A.elem Text
-          [ Attr.attr "y" (\n -> n.r + 15.0) showNumD
-          , Attr.attrStatic "text-anchor" "middle"
-          , Attr.attrStatic "font-size" "10"
-          , Attr.attrStatic "fill" "#e0e0e0"
-          , Attr.attrStatic "font-family" "system-ui, sans-serif"
-          , Attr.attr "textContent" (truncateName 25 <<< _.name) idD
-          ]
-      ]
-    )
-  where
-  -- Convert a ModuleCircle to a Tree PackageNode using static attributes
-  toModuleCircle :: ModuleCircle -> A.Tree PackageNode
-  toModuleCircle mod = A.elem Circle
-    [ Attr.attrStatic "cx" (show mod.x)
-    , Attr.attrStatic "cy" (show mod.y)
-    , Attr.attrStatic "r" (show mod.r)
-    , Attr.attrStatic "fill" "rgba(255, 255, 255, 0.7)"
-    , Attr.attrStatic "stroke" "rgba(255, 255, 255, 0.9)"
-    , Attr.attrStatic "stroke-width" "0.5"
-    , Attr.attrStatic "class" "module-circle"
-    ]
-
-packageFill :: String -> String
-packageFill source = case source of
-  "workspace" -> "#4a9eff"
-  "extra" -> "#ff9f43"
-  _ -> "#6c757d"
-
-packageStroke :: String -> String
-packageStroke source = case source of
-  "workspace" -> "#7cb8ff"
-  "extra" -> "#ffb870"
-  _ -> "#9a9a9a"
-
-truncateName :: Int -> String -> String
-truncateName maxLen name =
-  if String.length name > maxLen
-    then String.take maxLen name <> "…"
-    else name
 
 -- =============================================================================
 -- Main Entry Point

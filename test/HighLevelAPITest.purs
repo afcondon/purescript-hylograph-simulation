@@ -5,21 +5,23 @@
 -- |
 -- | The same event model works for both D3 and WASM engines, and can be
 -- | adapted to any UI framework (Halogen, React, vanilla JS).
+-- |
+-- | Note: Rendering is now handled externally (via HATS or any other approach).
+-- | This test focuses on the simulation physics and event model.
 module Test.HighLevelAPITest where
 
 import Prelude
 
 import Data.Nullable (null) as Nullable
 import Effect (Effect)
-import Effect.Aff (launchAff_, attempt)
-import Effect.Aff as Aff
+import Effect.Aff (launchAff_)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Exception (try, message)
 import Data.Either (Either(..))
 
 -- The high-level API - just one import!
-import PSD3.Simulation
+import Hylograph.Simulation
   ( runSimulation
   , initWASM
   , Engine(..)
@@ -34,12 +36,6 @@ import PSD3.Simulation
   , withY
   , static
   )
-
--- For visualization template
-import PSD3.AST as A
-import PSD3.Unified.Attribute as Attr
-import PSD3.Unified.Display (showNumD)
-import PSD3.Internal.Selection.Types (ElementType(..))
 
 -- =============================================================================
 -- Node Type
@@ -74,17 +70,19 @@ main = launchAff_ do
       , nodes: initialNodes 150.0
       , links: []
       , container: "#d3-sim"
-      , nodeElement: "circle"
-      , nodeTemplate: nodeTemplate "#06b6d4"
-      , alphaMin: 0.001, renderNodes: true
+      , alphaMin: 0.001
       }
 
     case d3Result of
       Left err -> log $ "D3 simulation ERROR: " <> message err
-      Right { events: d3Events } -> do
+      Right { handle: d3Handle, events: d3Events } -> do
         log "D3 simulation created successfully"
         -- Subscribe to D3 events (framework-agnostic!)
+        -- In real usage, you'd render nodes on Tick using handle.getNodes
         _ <- subscribe d3Events \event -> case event of
+          Tick _ -> do
+            -- Could render here: nodes <- d3Handle.getNodes; renderNodes(nodes)
+            pure unit
           Completed -> log "✓ D3 simulation converged!"
           _ -> pure unit
         pure unit
@@ -100,17 +98,18 @@ main = launchAff_ do
       , nodes: initialNodes 350.0
       , links: []
       , container: "#wasm-sim"
-      , nodeElement: "circle"
-      , nodeTemplate: nodeTemplate "#f97316"
-      , alphaMin: 0.001, renderNodes: true
+      , alphaMin: 0.001
       }
 
     case wasmResult of
       Left err -> log $ "WASM simulation ERROR: " <> message err
-      Right { events: wasmEvents } -> do
+      Right { handle: wasmHandle, events: wasmEvents } -> do
         log "WASM simulation created successfully"
         -- Subscribe to WASM events (identical pattern!)
         _ <- subscribe wasmEvents \event -> case event of
+          Tick _ -> do
+            -- Could render here: nodes <- wasmHandle.getNodes; renderNodes(nodes)
+            pure unit
           Completed -> log "✓ WASM simulation converged!"
           _ -> pure unit
         pure unit
@@ -139,12 +138,3 @@ initialNodes centerX =
 mkNode :: Int -> Number -> Number -> String -> MyNode
 mkNode id x y label =
   { id, x, y, vx: 0.0, vy: 0.0, fx: Nullable.null, fy: Nullable.null, label }
-
--- | Node visualization template (works for any color)
-nodeTemplate :: String -> MyNode -> A.Tree MyNode
-nodeTemplate color _ = A.elem Circle
-  [ Attr.attr "cx" _.x showNumD
-  , Attr.attr "cy" _.y showNumD
-  , Attr.attrStatic "r" "12"
-  , Attr.attrStatic "fill" color
-  ]

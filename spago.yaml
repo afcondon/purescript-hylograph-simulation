@@ -2,22 +2,30 @@ workspace:
   packageSet:
     registry: 67.0.1
   extraPackages:
-    psd3-graph:
-      path: ../purescript-psd3-graph
-    psd3-selection:
-      path: ../purescript-psd3-selection
-    psd3-layout:
-      path: ../purescript-psd3-layout
+    hylograph-graph:
+      path: ../purescript-hylograph-graph
+    hylograph-selection:
+      path: ../purescript-hylograph-selection
+    hylograph-layout:
+      path: ../purescript-hylograph-layout
+    hylograph-transitions:
+      path: ../purescript-hylograph-transitions
+    hylograph-d3-kernel:
+      path: ../purescript-hylograph-d3-kernel
+    hylograph-simulation-core:
+      path: ../purescript-hylograph-simulation-core
+    hylograph-simulation-halogen:
+      path: ../purescript-hylograph-simulation-halogen
 
 package:
-  name: psd3-simulation
+  name: hylograph-simulation
   description: Force-directed graph simulation for PureScript D3
   publish:
     version: 0.1.0
     license: MIT
     location:
       githubOwner: afcondon
-      githubRepo: purescript-psd3-simulation
+      githubRepo: purescript-hylograph-simulation
   dependencies:
     - aff
     - arrays
@@ -33,7 +41,8 @@ package:
     - ordered-collections
     - partial
     - prelude
-    - psd3-selection
+    - hylograph-selection
+    - hylograph-transitions
     - refs
     - tuples
     - unsafe-coerce
@@ -44,7 +53,7 @@ package:
     dependencies:
       - assert
       - nullable
-      - psd3-layout
+      - hylograph-layout
       - affjax
       - affjax-web
       - argonaut

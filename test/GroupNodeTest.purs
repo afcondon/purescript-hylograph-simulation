@@ -1,10 +1,8 @@
 -- | Group Node Test
 -- |
--- | Tests the runSimulation API with group elements (like the beeswarm uses).
--- | This isolates whether the issue is with:
--- | 1. nodeElement: "g" (group elements)
--- | 2. Transform-based positioning
--- | 3. Dynamic force parameters
+-- | Tests the runSimulation API with different force configurations.
+-- | Note: Rendering is now handled externally (via HATS or any other approach).
+-- | This test focuses on the simulation physics and event model.
 module Test.GroupNodeTest where
 
 import Prelude
@@ -16,7 +14,7 @@ import Effect.Console (log)
 import Effect.Exception (try, message)
 
 -- The high-level API
-import PSD3.Simulation
+import Hylograph.Simulation
   ( runSimulation
   , Engine(..)
   , SimulationNode
@@ -35,12 +33,6 @@ import PSD3.Simulation
   , dynamic
   )
 
--- For visualization template
-import PSD3.AST as A
-import PSD3.Unified.Attribute as Attr
-import PSD3.Unified.Display (showNumD, idD)
-import PSD3.Internal.Selection.Types (ElementType(..))
-
 -- =============================================================================
 -- Node Type
 -- =============================================================================
@@ -56,8 +48,8 @@ main :: Effect Unit
 main = do
   log "Group Node Test Starting..."
 
-  -- Test 1: Group elements with transform (like beeswarm)
-  log "Test 1: Group elements with transform..."
+  -- Test 1: manyBody + center forces
+  log "Test 1: manyBody + center forces..."
   result1 <- runSimulation
     { engine: D3
     , setup: setup "test1"
@@ -67,17 +59,15 @@ main = do
     , nodes: testNodes 200.0
     , links: []
     , container: "#test1"
-    , nodeElement: "g"  -- Group element like beeswarm
-    , nodeTemplate: groupNodeTemplate
-    , alphaMin: 0.001, renderNodes: true
+    , alphaMin: 0.001
     }
 
   _ <- subscribe result1.events \event -> case event of
-    Completed -> log "✓ Test 1: Group nodes completed!"
+    Completed -> log "✓ Test 1: manyBody + center completed!"
     _ -> pure unit
 
-  -- Test 2: Circle elements with cx/cy (like the working test)
-  log "Test 2: Circle elements with cx/cy..."
+  -- Test 2: Simple manyBody + center
+  log "Test 2: Simple manyBody + center..."
   result2E <- try $ runSimulation
     { engine: D3
     , setup: setup "test2"
@@ -87,9 +77,7 @@ main = do
     , nodes: testNodes 150.0
     , links: []
     , container: "#test2"
-    , nodeElement: "circle"  -- Direct circle like working test
-    , nodeTemplate: circleNodeTemplate
-    , alphaMin: 0.001, renderNodes: true
+    , alphaMin: 0.001
     }
 
   case result2E of
@@ -97,7 +85,7 @@ main = do
     Right result2 -> do
       log "Test 2 simulation created"
       _ <- subscribe result2.events \event -> case event of
-        Completed -> log "✓ Test 2: Circle nodes completed!"
+        Completed -> log "✓ Test 2: Simple forces completed!"
         _ -> pure unit
       pure unit
 
@@ -112,9 +100,7 @@ main = do
     , nodes: testNodesWithTarget
     , links: []
     , container: "#test3"
-    , nodeElement: "circle"
-    , nodeTemplate: circleNodeTemplateTarget
-    , alphaMin: 0.001, renderNodes: true
+    , alphaMin: 0.001
     }
 
   case result3E of
@@ -143,8 +129,6 @@ testNodes centerX =
   ]
 
 -- Nodes with different target X positions (like beeswarm layers)
--- All start at x=150 (center) but have different targetX values
--- This should cause visible movement as positionX pulls them apart
 testNodesWithTarget :: Array (SimulationNode (r :: Number, color :: String, targetX :: Number))
 testNodesWithTarget =
   [ { id: 0, x: 150.0, y: 100.0, vx: 0.0, vy: 0.0, fx: Nullable.null, fy: Nullable.null, r: 10.0, color: "#e63946", targetX: 75.0 }
@@ -158,47 +142,3 @@ testNodesWithTarget =
 mkNode :: Int -> Number -> Number -> Number -> String -> MyNode
 mkNode id x y r color =
   { id, x, y, vx: 0.0, vy: 0.0, fx: Nullable.null, fy: Nullable.null, r, color }
-
--- =============================================================================
--- Templates
--- =============================================================================
-
--- | Group template with transform (like beeswarm)
-groupNodeTemplate :: MyNode -> A.Tree MyNode
-groupNodeTemplate _ = A.elem Group
-  [ Attr.attr "transform" (\n -> "translate(" <> show n.x <> "," <> show n.y <> ")") idD
-  ]
-  `A.withChildren`
-    [ A.elem Circle
-        [ Attr.attrStatic "cx" "0"
-        , Attr.attrStatic "cy" "0"
-        , Attr.attr "r" _.r showNumD
-        , Attr.attr "fill" _.color idD
-        , Attr.attrStatic "stroke" "#333"
-        , Attr.attrStatic "stroke-width" "1"
-        ]
-    ]
-
--- | Direct circle template with cx/cy (like working test)
-circleNodeTemplate :: MyNode -> A.Tree MyNode
-circleNodeTemplate _ = A.elem Circle
-  [ Attr.attr "cx" _.x showNumD
-  , Attr.attr "cy" _.y showNumD
-  , Attr.attr "r" _.r showNumD
-  , Attr.attr "fill" _.color idD
-  , Attr.attrStatic "stroke" "#333"
-  , Attr.attrStatic "stroke-width" "1"
-  ]
-
--- | Circle template for nodes with targetX
-type TargetNode = SimulationNode (r :: Number, color :: String, targetX :: Number)
-
-circleNodeTemplateTarget :: TargetNode -> A.Tree TargetNode
-circleNodeTemplateTarget _ = A.elem Circle
-  [ Attr.attr "cx" _.x showNumD
-  , Attr.attr "cy" _.y showNumD
-  , Attr.attr "r" _.r showNumD
-  , Attr.attr "fill" _.color idD
-  , Attr.attrStatic "stroke" "#333"
-  , Attr.attrStatic "stroke-width" "1"
-  ]

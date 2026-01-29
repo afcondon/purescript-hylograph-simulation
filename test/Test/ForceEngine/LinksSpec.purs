@@ -16,7 +16,7 @@ import Effect.Console (log)
 import Test.Assert (assert')
 
 -- Import the module under test
-import PSD3.ForceEngine.Links as Links
+import Hylograph.ForceEngine.Links as Links
 
 -- =============================================================================
 -- Test Node and Link Types
