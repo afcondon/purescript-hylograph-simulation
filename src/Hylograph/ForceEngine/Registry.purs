@@ -68,6 +68,19 @@ foreign import toAny :: forall row linkRow. Simulation row linkRow -> AnySimulat
 foreign import unsafeFromAny :: forall row linkRow. AnySimulation -> Simulation row linkRow
 
 -- | Global registry ref. Created once at module load time.
+-- |
+-- | SAFETY: This uses the standard "global mutable state" pattern where
+-- | `unsafePerformEffect` creates a top-level Ref initialized once at module
+-- | load. This is safe because:
+-- |
+-- | 1. The Ref is created exactly once (module initialization is idempotent)
+-- | 2. All access goes through Effect, preserving referential transparency
+-- |    within pure code - the registry operations are all in Effect
+-- | 3. This pattern is widely used in PureScript for global caches/registries
+-- |
+-- | Alternative designs (passing registry explicitly or using ReaderT) would
+-- | significantly complicate the API for minimal benefit, since simulations
+-- | need a global coordination point for debugging and lifecycle management.
 registryRef :: Ref (Map String AnySimulation)
 registryRef = unsafePerformEffect $ Ref.new Map.empty
 

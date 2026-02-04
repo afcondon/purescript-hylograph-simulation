@@ -34,7 +34,6 @@ import Prelude
 
 import Data.Array as Array
 import Data.Maybe (Maybe(..))
-import Partial.Unsafe (unsafeCrashWith)
 
 -- =============================================================================
 -- FFI-backed Fast Data Structures
@@ -85,22 +84,17 @@ foreign import stringSetMember :: String -> StringSet -> Boolean
 
 -- | Convert raw links (integer indices) to swizzled links (node references)
 -- |
--- | **WARNING: UNSAFE with filtered node subsets.**
+-- | Expects `link.source` and `link.target` to be valid *array indices* into the
+-- | `nodes` array. Links with out-of-bounds indices are silently dropped.
 -- |
--- | This function assumes `link.source` and `link.target` are valid *array indices*
--- | into the `nodes` array. It will crash if any link references an index >= nodes.length.
--- |
--- | This assumption breaks when:
--- | - Nodes have been filtered (e.g., showing only visible nodes)
--- | - Link indices are *semantic* (node.index field values) rather than array positions
--- |
--- | For filtered subsets, use `swizzleLinksByIndex` instead, which looks up nodes
--- | by their `.index` field and safely drops links where endpoints aren't found.
+-- | Note: If your link indices are *semantic* (node.index field values) rather than
+-- | array positions, use `swizzleLinksByIndex` instead, which looks up nodes by
+-- | their `.index` field.
 -- |
 -- | The transform function allows you to build the output link record,
 -- | copying extra fields from the raw link as needed.
 -- |
--- | Example (full node set only):
+-- | Example:
 -- | ```purescript
 -- | let swizzled = swizzleLinks nodes rawLinks \src tgt i link ->
 -- |       { source: src, target: tgt, index: i, value: link.value }
@@ -112,18 +106,15 @@ swizzleLinks
   -> (node -> node -> Int -> { source :: Int, target :: Int | rawLink } -> swizzled)
   -> Array swizzled
 swizzleLinks nodes links transform =
-  Array.mapWithIndex swizzle links
+  Array.mapMaybe swizzle links
+    # Array.mapWithIndex reindex
   where
-  swizzle i link =
-    let src = unsafeArrayIndex nodes link.source
-        tgt = unsafeArrayIndex nodes link.target
-    in transform src tgt i link
+  swizzle link = do
+    src <- Array.index nodes link.source
+    tgt <- Array.index nodes link.target
+    pure { src, tgt, link }
 
--- | Safe-ish array index (crashes with helpful message if out of bounds)
-unsafeArrayIndex :: forall a. Array a -> Int -> a
-unsafeArrayIndex arr i = case Array.index arr i of
-  Just x -> x
-  Nothing -> unsafeCrashWith ("swizzleLinks: Array index out of bounds: " <> show i)
+  reindex i { src, tgt, link } = transform src tgt i link
 
 -- | Swizzle links by looking up nodes by their index field
 -- |
