@@ -30,7 +30,6 @@ export function createManyBody_(config) {
 // Create a collision force
 // Note: radius and strength can be numbers or functions
 export function createCollide_(config) {
-  console.log('[createCollide_] STATIC radius:', config.radius, 'strength:', config.strength);
   const force = forceCollide()
     .radius(config.radius)
     .strength(config.strength)
@@ -40,7 +39,6 @@ export function createCollide_(config) {
 
 // Create a collision force with dynamic radius function
 export function createCollideWithRadius_(radiusFn) {
-  console.log('[createCollideWithRadius_] Called');
   return function(strength) {
     return function(iterations) {
       const force = forceCollide()
@@ -135,17 +133,10 @@ export function createRadialFiltered_(config) {
 
 // Create a collision force with dynamic radius accessor
 // radiusAccessor is called per-node to get collision radius
-let collideDebugCount = 0;
 export function createCollideDynamic_(config) {
-  console.warn('🔴🔴🔴 COLLIDE DYNAMIC CREATED 🔴🔴🔴 strength:', config.strength);
   const force = forceCollide()
     .radius(function(d) {
-      const r = config.radiusAccessor(d);
-      if (collideDebugCount < 3) {
-        console.warn(`🔴 Collide radius called: node ${d.id} (${d.pkg?.name || d.name || '?'}) r=${r}`);
-        collideDebugCount++;
-      }
-      return r;
+      return config.radiusAccessor(d);
     })
     .strength(config.strength)
     .iterations(config.iterations);
@@ -154,18 +145,10 @@ export function createCollideDynamic_(config) {
 
 // Create an X positioning force with dynamic target accessor
 // xAccessor is called per-node to get target X position
-let forceXDebugCount = 0;
 export function createForceXDynamic_(config) {
   const force = forceX()
     .x(function(d) {
-      const target = config.xAccessor(d);
-      // Only log modules (id >= 93), not packages
-      if (forceXDebugCount < 5 && d.id >= 93) {
-        const dist = Math.abs(d.x - target);
-        console.log(`[ForceXDynamic] module ${d.id} (${d.name?.substring(0,20)}) -> gridX=${target?.toFixed(0)}, x=${d.x?.toFixed(0)}, dist=${dist.toFixed(0)}`);
-        forceXDebugCount++;
-      }
-      return target;
+      return config.xAccessor(d);
     })
     .strength(config.strength);
   return force;
@@ -202,10 +185,8 @@ export function createForceYGrid_(strength) {
 // Create collision force that reads node.r directly (no PureScript callback)
 // Adds padding to node radius
 export function createCollideGrid_(padding) {
-  console.log('[createCollideGrid_] padding:', padding);
   return function(strength) {
     return function(iterations) {
-      console.log('[createCollideGrid_] strength:', strength, 'iterations:', iterations);
       return forceCollide()
         .radius(d => d.r + padding)
         .strength(strength)
@@ -224,15 +205,9 @@ export function createCollideGrid_(padding) {
 export function initializeForce_(force) {
   return function(nodes) {
     return function() {
-      const forceStr = force.toString().substring(0, 30);
-      console.warn(`🟢 initializeForce: ${nodes.length} nodes, force=${forceStr}`);
-      const start = performance.now();
       if (force.initialize) {
         force.initialize(nodes, Math.random);
-      } else {
-        console.warn('🟡 Force has no initialize method!');
       }
-      const elapsed = performance.now() - start;
       return force;
     };
   };
@@ -264,15 +239,9 @@ export function initializeLinkForce_(force) {
 
 // Apply a force to nodes
 // This is the core calculation - it mutates vx/vy on nodes
-let applyForceLogCount = 0;
 export function applyForce_(force) {
   return function(alpha) {
     return function() {
-      if (applyForceLogCount < 15) {
-        const forceStr = force.toString().substring(0, 50);
-        console.warn(`🟣 applyForce: alpha=${alpha.toFixed(3)}, force=${forceStr}`);
-        applyForceLogCount++;
-      }
       force(alpha);
     };
   };
@@ -310,23 +279,9 @@ export function updatePositions_(nodes) {
 
 // Combined: apply velocity decay and update positions
 // Respects fixed nodes (fx/fy) - if set, node is pinned there
-let integrateDebugCount = 0;
 export function integratePositions_(nodes) {
   return function(velocityDecay) {
     return function() {
-      const start = performance.now();
-
-      // Debug: log first FREE node (fx == null)
-      if (integrateDebugCount % 100 === 0) {
-        const freeNode = nodes.find(n => n.fx == null);
-        if (freeNode) {
-          console.log(`[IntegrateDebug tick=${integrateDebugCount}] free node ${freeNode.id}: x=${freeNode.x?.toFixed(1)}, y=${freeNode.y?.toFixed(1)}, vx=${freeNode.vx?.toFixed(3)}, vy=${freeNode.vy?.toFixed(3)}`);
-        } else {
-          console.log(`[IntegrateDebug tick=${integrateDebugCount}] NO FREE NODES! All ${nodes.length} nodes have fx set`);
-        }
-      }
-      integrateDebugCount++;
-
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
 
@@ -347,10 +302,6 @@ export function integratePositions_(nodes) {
           node.vy *= velocityDecay;
           node.y += node.vy;
         }
-      }
-      const elapsed = performance.now() - start;
-      if (elapsed > 2) {
-        console.log(`[Integrate] Took ${elapsed.toFixed(1)}ms for ${nodes.length} nodes`);
       }
     };
   };
@@ -389,12 +340,6 @@ export function initializeNodes_(nodes) {
       // If no position, use random (D3's default behavior)
       if (node.x === undefined) node.x = Math.random() * 100 - 50;
       if (node.y === undefined) node.y = Math.random() * 100 - 50;
-
-      // DEBUG: Mark node 93 (first module) with a unique marker
-      if (node.id === 93) {
-        node.__simMarker__ = true;
-        console.log(`[InitNodes] Marked node 93 with __simMarker__, x=${node.x?.toFixed(1)}`);
-      }
     }
   };
 }
@@ -402,11 +347,6 @@ export function initializeNodes_(nodes) {
 // =============================================================================
 // Animation Frame
 // =============================================================================
-
-// Tick timing stats
-let tickStats = { count: 0, totalTime: 0, maxTime: 0, lastReport: Date.now() };
-let lastTickEnd = performance.now();
-let gapStats = { total: 0, max: 0, count: 0 };
 
 // Use setTimeout instead of rAF to avoid browser throttling
 // Set to true to use setTimeout instead of requestAnimationFrame
@@ -416,34 +356,9 @@ const FRAME_TIME = 8; // Target ~60fps (accounting for ~8ms work time)
 // Request animation frame - returns a cancel function
 export function requestAnimationFrame_(callback) {
   return function() {
-    const scheduleTime = performance.now();
-    const gapSinceLastTick = scheduleTime - lastTickEnd;
-
     let id;
     const handler = function(timestamp) {
-      const fireTime = performance.now();
-      const waitTime = fireTime - scheduleTime;
-
-      const start = performance.now();
-      callback(timestamp || fireTime)();
-      const elapsed = performance.now() - start;
-      lastTickEnd = performance.now();
-
-      tickStats.count++;
-      tickStats.totalTime += elapsed;
-      tickStats.maxTime = Math.max(tickStats.maxTime, elapsed);
-      gapStats.total += waitTime;
-      gapStats.max = Math.max(gapStats.max, waitTime);
-      gapStats.count++;
-
-      const now = Date.now();
-      if (now - tickStats.lastReport > 2000) {
-        const avg = tickStats.totalTime / tickStats.count;
-        const avgGap = gapStats.total / gapStats.count;
-        console.log(`[AnimLoop] ${tickStats.count} ticks, work=${avg.toFixed(1)}ms, wait=${avgGap.toFixed(0)}ms (max=${gapStats.max.toFixed(0)}ms) [${USE_SETTIMEOUT ? 'setTimeout' : 'rAF'}]`);
-        tickStats = { count: 0, totalTime: 0, maxTime: 0, lastReport: now };
-        gapStats = { total: 0, max: 0, count: 0 };
-      }
+      callback(timestamp || performance.now())();
     };
 
     if (USE_SETTIMEOUT) {
@@ -602,7 +517,6 @@ export function attachGroupDragWithReheat_(elements) {
       return function() {
         const container = select(containerSelector).node();
         if (!container) {
-          console.warn('[attachGroupDragWithReheat] Container not found:', containerSelector);
           return;
         }
 
@@ -717,18 +631,11 @@ export function querySelectorElements_(selector) {
 // Debug Helpers
 // =============================================================================
 
+// Debug helper - only logs when explicitly called
 export function logNodes_(label) {
   return function(nodes) {
     return function() {
-      console.log(`[ForceEngine] ${label}:`, {
-        count: nodes.length,
-        sample: nodes.slice(0, 3).map(n => ({
-          x: n.x?.toFixed(2),
-          y: n.y?.toFixed(2),
-          vx: n.vx?.toFixed(4),
-          vy: n.vy?.toFixed(4)
-        }))
-      });
+      // No-op in production - call explicitly for debugging
     };
   };
 }
