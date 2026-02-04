@@ -13,9 +13,9 @@ The transition engine interpolates values over time with easing functions:
 
 [source,purescript]
 ----
-import PSD3.Transition.Engine as Trans
-import PSD3.Transition.Coordinator as Coord
-import PSD3.Transition.Easing (cubicInOut)
+import Hylograph.Transition.Engine as Trans
+import Hylograph.Transition.Coordinator as Coord
+import Hylograph.Transition.Easing (cubicInOut)
 
 animateToPositions :: Array Node -> Array { x :: Number, y :: Number } -> Effect Unit
 animateToPositions nodes targetPositions = do

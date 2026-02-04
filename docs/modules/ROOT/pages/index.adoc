@@ -1,11 +1,11 @@
-= PSD3 Simulation
+= Hylograph Simulation
 :description: Declarative force simulation for interactive data visualization
 
-A declarative force simulation engine that enables **force layouts as reactive UI**. Unlike D3's imperative approach, PSD3 Simulation integrates with framework state management (Halogen, React) so your visualization modules stay stateless and your simulation responds to data changes with proper enter/update/exit semantics.
+A declarative force simulation engine that enables **force layouts as reactive UI**. Unlike D3's imperative approach, Hylograph Simulation integrates with framework state management (Halogen, React) so your visualization modules stay stateless and your simulation responds to data changes with proper enter/update/exit semantics.
 
 == The Vision: Force Layouts as UI
 
-Traditional D3 force simulations are imperative - you mutate state, attach callbacks, and manually synchronize with your UI framework. PSD3 Simulation inverts this:
+Traditional D3 force simulations are imperative - you mutate state, attach callbacks, and manually synchronize with your UI framework. Hylograph Simulation inverts this:
 
 [source]
 ----
@@ -44,7 +44,7 @@ Configure forces with a composable DSL:
 
 [source,purescript]
 ----
-import PSD3.ForceEngine.Setup as Setup
+import Hylograph.ForceEngine.Setup as Setup
 
 mySetup :: Setup.Setup MyNode
 mySetup = Setup.setup "physics"
@@ -129,48 +129,48 @@ Setup.applySetup forceSetup sim  -- Nodes respond to forces
 
 [source,bash]
 ----
-spago install psd3-simulation
+spago install hylograph-simulation
 ----
 
 === Framework Integration Packages
 
-The core `psd3-simulation` package is framework-agnostic. For framework integration, add the appropriate adapter package:
+The core `hylograph-simulation` package is framework-agnostic. For framework integration, add the appropriate adapter package:
 
 [cols="1,2,2"]
 |===
 | Framework | Package | Provides
 
 | Halogen
-| `psd3-simulation-halogen`
+| `hylograph-simulation-halogen`
 | `subscribeToSimulation` - Halogen subscription emitter
 
 | React
-| `psd3-react`
+| `hylograph-react`
 | `useSimulation` hook
 |===
 
 [source,bash]
 ----
 # For Halogen projects
-spago install psd3-simulation psd3-simulation-halogen
+spago install hylograph-simulation hylograph-simulation-halogen
 
 # For React projects
-spago install psd3-simulation psd3-react
+spago install hylograph-simulation hylograph-react
 ----
 
 This separation keeps framework-specific dependencies out of the core package, so React projects don't pull in Halogen dependencies and vice versa.
 
-== Part of the PSD3 Ecosystem
+== Part of the Hylograph Ecosystem
 
 *Core Libraries:*
 
-* *psd3-tree* - Tree data structures (dependency)
-* *psd3-selection* - D3 selection and rendering
-* *psd3-simulation* - Force simulation (this package)
-* *psd3-layout* - Layout algorithms
-* *psd3-graph* - Graph algorithms
+* *hylograph-graph* - Tree data structures (dependency)
+* *hylograph-selection* - D3 selection and rendering
+* *hylograph-simulation* - Force simulation (this package)
+* *hylograph-layout* - Layout algorithms
+* *hylograph-graph* - Graph algorithms
 
 *Framework Adapters:*
 
-* *psd3-simulation-halogen* - Halogen subscription integration
-* *psd3-react* - React hooks integration
+* *hylograph-simulation-halogen* - Halogen subscription integration
+* *hylograph-react* - React hooks integration

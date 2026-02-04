@@ -7,7 +7,7 @@ The Setup DSL provides a composable, declarative way to configure force simulati
 
 [source,purescript]
 ----
-import PSD3.ForceEngine.Setup as Setup
+import Hylograph.ForceEngine.Setup as Setup
 
 mySetup :: Setup.Setup MyNode
 mySetup = Setup.setup "my-simulation"

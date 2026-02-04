@@ -1,15 +1,15 @@
 = React Integration
-:description: Integrating PSD3 Simulation with React components
+:description: Integrating Hylograph Simulation with React components
 
-PSD3 provides the `useSimulation` hook for React integration, matching the subscription pattern used in Halogen.
+Hylograph provides the `useSimulation` hook for React integration, matching the subscription pattern used in Halogen.
 
 == Installation
 
-React integration requires the separate `psd3-react` package:
+React integration requires the separate `hylograph-react` package:
 
 [source,bash]
 ----
-spago install psd3-simulation psd3-react
+spago install hylograph-simulation hylograph-react
 ----
 
 This keeps React-specific dependencies (`react-basic-hooks`) out of the core package.
@@ -18,8 +18,8 @@ This keeps React-specific dependencies (`react-basic-hooks`) out of the core pac
 
 [source,purescript]
 ----
-import PSD3.React.Simulation (useSimulation, UseSimulationResult)
-import PSD3.ForceEngine.Setup as Setup
+import Hylograph.React.Simulation (useSimulation, UseSimulationResult)
+import Hylograph.ForceEngine.Setup as Setup
 
 mkForceGraph :: Component { nodes :: Array SimNode, links :: Array SimLink }
 mkForceGraph = do
@@ -59,7 +59,7 @@ Define your force setup as a value:
 
 [source,purescript]
 ----
-import PSD3.ForceEngine.Setup as Setup
+import Hylograph.ForceEngine.Setup as Setup
 
 mySetup :: Setup.Setup SimNode
 mySetup = Setup.setup "force-graph"
@@ -85,10 +85,10 @@ import Prelude
 import Data.Maybe (Maybe(..))
 import Data.Nullable as Nullable
 import Effect (Effect)
-import PSD3.React.Hooks (useContainerId)
-import PSD3.React.Simulation (useSimulation)
-import PSD3.ForceEngine.Setup as Setup
-import PSD3.ForceEngine.Simulation (SimulationNode)
+import Hylograph.React.Hooks (useContainerId)
+import Hylograph.React.Simulation (useSimulation)
+import Hylograph.ForceEngine.Setup as Setup
+import Hylograph.ForceEngine.Simulation (SimulationNode)
 import React.Basic.DOM as R
 import React.Basic.Hooks (Component, component, useEffect)
 import React.Basic.Hooks as React
@@ -130,7 +130,7 @@ mkForceGraph = do
       , R.p_ [ R.text $ if isRunning then "Simulating..." else "Settled" ]
       ]
 
--- Rendering function (uses psd3-selection or raw D3)
+-- Rendering function (uses hylograph-selection or raw D3)
 renderNodes :: String -> Array MyNode -> Effect Unit
 renderNodes containerId nodes = do
   -- ... render circles at node.x, node.y
@@ -143,7 +143,7 @@ For more control, use `useSimulationWithCallbacks`:
 
 [source,purescript]
 ----
-import PSD3.React.Simulation (useSimulationWithCallbacks, defaultCallbackHandlers)
+import Hylograph.React.Simulation (useSimulationWithCallbacks, defaultCallbackHandlers)
 
 mkForceGraph = do
   containerId <- useContainerId
@@ -203,7 +203,7 @@ Add drag to rendered nodes:
 
 [source,purescript]
 ----
-import PSD3.ForceEngine.Simulation as Sim
+import Hylograph.ForceEngine.Simulation as Sim
 
 mkDraggableGraph = do
   containerId <- useContainerId

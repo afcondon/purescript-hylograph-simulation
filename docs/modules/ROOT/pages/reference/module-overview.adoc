@@ -1,16 +1,16 @@
 = Module Overview
-:description: Reference for all PSD3 Simulation modules
+:description: Reference for all Hylograph Simulation modules
 
-== PSD3.ForceEngine
+== Hylograph.ForceEngine
 
 The main entry point. Re-exports commonly needed functions from submodules.
 
 [source,purescript]
 ----
-import PSD3.ForceEngine as FE
+import Hylograph.ForceEngine as FE
 ----
 
-== PSD3.ForceEngine.Types
+== Hylograph.ForceEngine.Types
 
 Core data types for simulations.
 
@@ -85,7 +85,7 @@ type CenterConfig =
   }
 ----
 
-== PSD3.ForceEngine.Simulation
+== Hylograph.ForceEngine.Simulation
 
 High-level simulation management.
 
@@ -143,7 +143,7 @@ attachDrag :: forall d. Simulation d -> Element -> Effect Unit
 attachGroupDrag :: forall d. Simulation d -> Element -> Effect Unit
 ----
 
-== PSD3.ForceEngine.Events
+== Hylograph.ForceEngine.Events
 
 Event types and callback configuration.
 
@@ -165,7 +165,7 @@ type SimulationCallbacks d =
 defaultCallbacks :: forall d. SimulationCallbacks d
 ----
 
-== PSD3.ForceEngine.Links
+== Hylograph.ForceEngine.Links
 
 Utilities for working with links.
 
@@ -178,7 +178,7 @@ swizzleLinks :: forall d. Array RawLink -> Array (SimNode d) -> Array (SimLink d
 filterLinksToSubset :: forall d. Array (SimLink d) -> Array (SimNode d) -> Array (SimLink d)
 ----
 
-== PSD3.ForceEngine.Halogen
+== Hylograph.ForceEngine.Halogen
 
 Halogen framework integration.
 
@@ -188,7 +188,7 @@ Halogen framework integration.
 subscribeToSimulation :: forall d m. MonadAff m => Simulation d -> H.HalogenM _ _ _ _ m (H.SubscriptionId)
 ----
 
-== PSD3.ForceEngine.Registry
+== Hylograph.ForceEngine.Registry
 
 Multi-simulation management.
 
@@ -210,7 +210,7 @@ clearRegistry :: Effect Unit
 listSimulations :: Effect (Array String)
 ----
 
-== PSD3.ForceEngine.Core
+== Hylograph.ForceEngine.Core
 
 Low-level force creation and application. Generally you won't need these directly.
 

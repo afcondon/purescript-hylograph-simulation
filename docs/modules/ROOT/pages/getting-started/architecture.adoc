@@ -1,7 +1,7 @@
 = Architecture
 :description: Framework-first architecture for force simulations
 
-PSD3 Simulation is designed around a key insight: **force simulations are UI components**. Like any UI, they should integrate with your framework's state management rather than maintaining their own parallel state.
+Hylograph Simulation is designed around a key insight: **force simulations are UI components**. Like any UI, they should integrate with your framework's state management rather than maintaining their own parallel state.
 
 == The Problem with Traditional D3
 
@@ -27,7 +27,7 @@ This creates synchronization headaches:
 - Manual lifecycle management
 - Hard to animate enter/exit transitions
 
-== The PSD3 Approach: Framework Owns State
+== The Hylograph Approach: Framework Owns State
 
 [source]
 ----

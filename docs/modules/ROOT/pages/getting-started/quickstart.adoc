@@ -12,7 +12,7 @@ This guide walks you through creating a simple force-directed graph visualizatio
 
 [source,bash]
 ----
-spago install psd3-simulation psd3-selection
+spago install hylograph-simulation hylograph-selection
 ----
 
 == Your First Simulation
@@ -21,7 +21,7 @@ spago install psd3-simulation psd3-selection
 
 [source,purescript]
 ----
-import PSD3.ForceEngine as FE
+import Hylograph.ForceEngine as FE
 
 type MyNode = { id :: String, label :: String }
 
@@ -87,7 +87,7 @@ main = do
   FE.onTick renderCallback sim
   where
   renderCallback nodes = do
-    -- Use psd3-selection to update node positions
+    -- Use hylograph-selection to update node positions
     -- Or update your framework's state
     pure unit
 ----
@@ -108,7 +108,7 @@ module Main where
 import Prelude
 import Effect (Effect)
 import Data.Maybe (Maybe(..))
-import PSD3.ForceEngine as FE
+import Hylograph.ForceEngine as FE
 
 main :: Effect Unit
 main = do

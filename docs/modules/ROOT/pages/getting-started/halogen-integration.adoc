@@ -1,15 +1,15 @@
 = Halogen Integration
-:description: Integrating PSD3 Simulation with Halogen components
+:description: Integrating Hylograph Simulation with Halogen components
 
-PSD3 Simulation provides first-class Halogen integration through the subscription pattern. This enables the "framework-first" architecture where all state lives in your Halogen component.
+Hylograph Simulation provides first-class Halogen integration through the subscription pattern. This enables the "framework-first" architecture where all state lives in your Halogen component.
 
 == Installation
 
-Halogen integration requires the separate `psd3-simulation-halogen` package:
+Halogen integration requires the separate `hylograph-simulation-halogen` package:
 
 [source,bash]
 ----
-spago install psd3-simulation psd3-simulation-halogen
+spago install hylograph-simulation hylograph-simulation-halogen
 ----
 
 This keeps Halogen-specific dependencies (`halogen-subscriptions`) out of the core package.
@@ -20,10 +20,10 @@ This keeps Halogen-specific dependencies (`halogen-subscriptions`) out of the co
 ----
 module MyComponent where
 
-import PSD3.ForceEngine.Simulation as Sim
-import PSD3.ForceEngine.Setup as Setup
-import PSD3.ForceEngine.Events (SimulationEvent(..), defaultCallbacks)
-import PSD3.ForceEngine.Halogen (subscribeToSimulation)
+import Hylograph.ForceEngine.Simulation as Sim
+import Hylograph.ForceEngine.Setup as Setup
+import Hylograph.ForceEngine.Events (SimulationEvent(..), defaultCallbacks)
+import Hylograph.ForceEngine.Halogen (subscribeToSimulation)
 
 type State =
   { simulation :: Maybe ForceSimulation
@@ -121,7 +121,7 @@ The callbacks are stored in mutable refs that `subscribeToSimulation` wires up:
 
 [source,purescript]
 ----
-import PSD3.ForceEngine.Events (defaultCallbacks, SimulationCallbacks)
+import Hylograph.ForceEngine.Events (defaultCallbacks, SimulationCallbacks)
 
 -- defaultCallbacks creates refs with no-op callbacks
 callbacks <- defaultCallbacks
@@ -142,10 +142,10 @@ import Data.Map as Map
 import Effect.Aff.Class (class MonadAff)
 import Halogen as H
 import Halogen.HTML as HH
-import PSD3.ForceEngine.Simulation as Sim
-import PSD3.ForceEngine.Setup as Setup
-import PSD3.ForceEngine.Events (SimulationEvent(..), defaultCallbacks)
-import PSD3.ForceEngine.Halogen (subscribeToSimulation)
+import Hylograph.ForceEngine.Simulation as Sim
+import Hylograph.ForceEngine.Setup as Setup
+import Hylograph.ForceEngine.Events (SimulationEvent(..), defaultCallbacks)
+import Hylograph.ForceEngine.Halogen (subscribeToSimulation)
 
 type SimNode = Sim.SimulationNode (name :: String, group :: Int)
 type SimLink = { source :: Int, target :: Int }

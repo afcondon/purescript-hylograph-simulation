@@ -1,4 +1,4 @@
-# purescript-psd3-simulation
+# purescript-hylograph-simulation
 
 [![Force Playground Demo](../../site/lib-simulation/public/demo.jpeg)](/#/force-playground)
 
@@ -14,14 +14,14 @@ import Effect (Effect)
 import Effect.Console (log)
 import Data.Nullable (null) as Nullable
 
-import PSD3.Simulation
+import Hylograph.Simulation
   ( runSimulation, Engine(..), SimulationEvent(..), subscribe
   , setup, manyBody, center, withStrength, withX, withY, static
   )
-import PSD3.AST as A
-import PSD3.Unified.Attribute as Attr
-import PSD3.Unified.Display (showNumD)
-import PSD3.Internal.Selection.Types (ElementType(..))
+import Hylograph.AST as A
+import Hylograph.Unified.Attribute as Attr
+import Hylograph.Unified.Display (showNumD)
+import Hylograph.Internal.Selection.Types (ElementType(..))
 
 main :: Effect Unit
 main = do
@@ -57,6 +57,12 @@ main = do
   log "Simulation running!"
 ```
 
+## Installation
+
+```bash
+spago install hylograph-simulation
+```
+
 ## Features
 
 - **Dual Engine Support** - Same API for D3.js and Rust/WASM physics
@@ -68,7 +74,7 @@ main = do
 ## Halogen Integration
 
 ```purescript
-import PSD3.ForceEngine.Halogen (toHalogenEmitter)
+import Hylograph.ForceEngine.Halogen (toHalogenEmitter)
 
 handleAction Initialize = do
   { handle, events } <- liftEffect $ runSimulation config
@@ -109,19 +115,20 @@ useEffect(() => {
 
 ## Modules
 
-- `PSD3.Simulation` - High-level API (recommended)
-- `PSD3.Simulation.Emitter` - Framework-agnostic event system
-- `PSD3.ForceEngine.Setup` - Declarative force configuration
-- `PSD3.ForceEngine.Simulation` - Low-level D3 simulation control
+- `Hylograph.Simulation` - High-level API (recommended)
+- `Hylograph.Simulation.Emitter` - Framework-agnostic event system
+- `Hylograph.ForceEngine.Setup` - Declarative force configuration
+- `Hylograph.ForceEngine.Simulation` - Low-level D3 simulation control
+- `Hylograph.ForceEngine.WASM` - WASM engine integration
 
-## Part of PSD3
+## Part of Hylograph
 
-This package is part of the PSD3 visualization ecosystem:
-- **psd3-selection** - D3 selection and rendering
-- **psd3-simulation** - Force simulation (this package)
-- **psd3-simulation-halogen** - Halogen integration
-- **psd3-graph** - Graph data structures
-- **psd3-layout** - Layout algorithms
+This package is part of the Hylograph visualization ecosystem:
+- **hylograph-selection** - D3 selection and rendering
+- **hylograph-simulation** - Force simulation (this package)
+- **hylograph-simulation-halogen** - Halogen integration
+- **hylograph-graph** - Graph data structures
+- **hylograph-layout** - Layout algorithms
 
 ## License
 

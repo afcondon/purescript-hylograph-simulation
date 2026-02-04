@@ -32,11 +32,11 @@ import Prelude
 import Effect (Effect)
 import Effect.Ref as Ref
 
-import PSD3.Simulation
+import Hylograph.Simulation
   ( runSimulation, Engine(..), SimulationEvent(..), subscribe
   , SimulationHandle
   )
-import PSD3.Transition.Engine as Trans
+import Hylograph.Transition.Engine as Trans
 
 type VizState =
   { simHandle :: SimulationHandle MyNode

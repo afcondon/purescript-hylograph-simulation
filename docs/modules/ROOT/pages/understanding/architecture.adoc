@@ -1,13 +1,13 @@
 = Architecture
-:description: Internal architecture of PSD3 Simulation
+:description: Internal architecture of Hylograph Simulation
 
-This document explains how PSD3 Simulation is structured and how the components work together.
+This document explains how Hylograph Simulation is structured and how the components work together.
 
 == Module Overview
 
 [source]
 ----
-PSD3.ForceEngine
+Hylograph.ForceEngine
 ├── Types          -- Core data types (SimNode, SimLink, ForceSpec)
 ├── Core           -- Low-level force calculations (FFI to D3)
 ├── Simulation     -- High-level simulation management
@@ -121,7 +121,7 @@ FE.reheat sim  -- Sets alpha back to alphaTarget
 
 == FFI Architecture
 
-PSD3 Simulation uses D3's force calculation code via FFI but manages the simulation loop in PureScript:
+Hylograph Simulation uses D3's force calculation code via FFI but manages the simulation loop in PureScript:
 
 [source]
 ----

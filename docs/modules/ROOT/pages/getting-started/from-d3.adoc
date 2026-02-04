@@ -1,13 +1,13 @@
 = From D3 Force
-:description: Migrating from D3's forceSimulation to PSD3 Simulation
+:description: Migrating from D3's forceSimulation to Hylograph Simulation
 
-If you're familiar with D3's force simulation, this guide shows how concepts map to PSD3.
+If you're familiar with D3's force simulation, this guide shows how concepts map to Hylograph.
 
 == Key Differences
 
 [cols="1,1"]
 |===
-| D3 | PSD3
+| D3 | Hylograph
 
 | Imperative method chaining | Explicit function calls
 | Hidden timer-based animation | You control the tick loop
@@ -28,7 +28,7 @@ const simulation = d3.forceSimulation(nodes)
   .force("link", d3.forceLink(links));
 ----
 
-.PSD3
+.Hylograph
 [source,purescript]
 ----
 sim <- FE.create FE.defaultConfig
@@ -50,14 +50,14 @@ simulation.on("tick", () => {
 });
 ----
 
-.PSD3
+.Hylograph
 [source,purescript]
 ----
 FE.onTick renderNodes sim
   where
   renderNodes updatedNodes = do
     -- updatedNodes is a fresh array with new positions
-    -- Use psd3-selection or your framework to update DOM
+    -- Use hylograph-selection or your framework to update DOM
 ----
 
 === Starting and Stopping
@@ -69,7 +69,7 @@ simulation.alpha(1).restart();  // Start/reheat
 simulation.stop();              // Stop
 ----
 
-.PSD3
+.Hylograph
 [source,purescript]
 ----
 FE.start sim      -- Start
@@ -87,7 +87,7 @@ simulation.force("charge")
   .distanceMax(200);
 ----
 
-.PSD3
+.Hylograph
 [source,purescript]
 ----
 let config = FE.defaultManyBody
@@ -108,7 +108,7 @@ d3.drag()
   .on("end", dragended);
 ----
 
-.PSD3
+.Hylograph
 [source,purescript]
 ----
 FE.attachDrag sim svgElement
@@ -116,7 +116,7 @@ FE.attachDrag sim svgElement
 FE.attachGroupDrag sim svgElement
 ----
 
-== Benefits of PSD3's Approach
+== Benefits of Hylograph's Approach
 
 *Predictability*::
 No hidden timers or automatic behavior. You decide when the simulation runs.
@@ -140,7 +140,7 @@ Works naturally with Halogen, React, or any other framework.
 simulation.on("end", () => console.log("Settled"));
 ----
 
-.PSD3
+.Hylograph
 [source,purescript]
 ----
 let callbacks = FE.defaultCallbacks
@@ -157,7 +157,7 @@ simulation.stop();
 for (let i = 0; i < 300; i++) simulation.tick();
 ----
 
-.PSD3
+.Hylograph
 [source,purescript]
 ----
 FE.stop sim
@@ -166,5 +166,5 @@ for_ (1..300) \_ -> FE.tick sim
 
 == Next Steps
 
-* xref:understanding/architecture.adoc[Architecture] - How PSD3 Simulation works internally
+* xref:understanding/architecture.adoc[Architecture] - How Hylograph Simulation works internally
 * xref:how-to/halogen-integration.adoc[Halogen Integration] - Use with Halogen

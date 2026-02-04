@@ -1,5 +1,5 @@
 = Understanding Forces
-:description: Guide to all force types available in PSD3 Simulation
+:description: Guide to all force types available in Hylograph Simulation
 
 Forces determine how nodes move in the simulation. Each force has a name (for identification) and configuration options.
 

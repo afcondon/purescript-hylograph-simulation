@@ -152,7 +152,7 @@ pure $ R.div_
 
 == Complete Example
 
-See `PSD3.React.ForcePlayground` in the `psd3-react` package for a full working example with:
+See `Hylograph.React.ForcePlayground` in the `hylograph-react` package for a full working example with:
 
 - Procedurally generated network data
 - Force simulation with `useSimulation` hook
