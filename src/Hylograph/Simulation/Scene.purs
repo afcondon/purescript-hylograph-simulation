@@ -1,13 +1,13 @@
 -- | Scene Orchestration Module (Legacy)
 -- |
--- | This module re-exports from the new PSD3.Scene modules for backwards compatibility.
+-- | This module re-exports from the new Hylograph.Scene modules for backwards compatibility.
 -- | It also provides the `applyRulesInPlace_` FFI which preserves object identity
 -- | for D3 data binding.
 -- |
 -- | For new code, prefer importing from:
--- | - `PSD3.Scene.Types` (types)
--- | - `PSD3.Scene.Rules` (rule helpers)
--- | - `PSD3.Scene.Engine` (orchestration)
+-- | - `Hylograph.Scene.Types` (types)
+-- | - `Hylograph.Scene.Rules` (rule helpers)
+-- | - `Hylograph.Scene.Engine` (orchestration)
 module Hylograph.Simulation.Scene
   ( -- Re-exports from Types
     module ReExport
