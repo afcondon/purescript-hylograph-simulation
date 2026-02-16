@@ -5,7 +5,7 @@ package:
   name: hylograph-simulation
   description: Force-directed graph simulation for PureScript D3
   publish:
-    version: 0.1.0
+    version: 0.2.0
     license: MIT
     location:
       githubOwner: afcondon
@@ -18,7 +18,7 @@ package:
     - foldable-traversable: ">=6.0.0 <7.0.0"
     - foreign-object: ">=4.1.0 <5.0.0"
     - functions: ">=6.0.0 <7.0.0"
-    - hylograph-selection: "*"
+    - hylograph-selection: ">=0.2.0 <0.3.0"
     - hylograph-transitions: ">=0.1.0 <0.2.0"
     - integers: ">=6.0.0 <7.0.0"
     - maybe: ">=6.0.0 <7.0.0"
