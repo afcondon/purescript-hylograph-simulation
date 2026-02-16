@@ -2,12 +2,12 @@
 -- |
 -- | Demonstrates the TickCoordinator driving PSD3 visualization using:
 -- | - applySetupWithData for declarative simulation management (GUP semantics)
--- | - AST for declarative visualization specification
--- | - Data joins for efficient DOM updates
--- | - D3 interpreter for rendering
+-- | - HATS for declarative visualization specification
+-- | - forEach for data-driven DOM updates
+-- | - InterpreterTick for rendering
 -- |
 -- | This shows the full unified architecture:
--- | Coordinator (single RAF) → Consumers (tick) → applySetupWithData (GUP) → PSD3 AST → D3 DOM
+-- | Coordinator (single RAF) → Consumers (tick) → applySetupWithData (GUP) → HATS Tree → DOM
 -- |
 -- | **Key feature**: Both D3 and WASM simulations use the SAME Setup API!
 module Test.PSD3VisualTest where
@@ -20,11 +20,9 @@ import Effect.Aff (launchAff_)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 
--- PSD3 Visualization
-import Hylograph.AST as A
-import Hylograph.Render (runD3, select, renderTree)
-import Hylograph.Unified.Attribute as Attr
-import Hylograph.Unified.Display (showNumD)
+-- HATS Visualization
+import Hylograph.HATS (Tree, forEach, elem, thunkedNum, staticStr)
+import Hylograph.HATS.InterpreterTick (rerender)
 import Hylograph.Internal.Selection.Types (ElementType(..))
 
 -- Coordinator and Consumers
@@ -134,20 +132,16 @@ setupD3SimulationPSD3 coord = do
   log $ "  D3 Entered: " <> show (map _.label result.nodes.entered)
 
   -- Initial render
-  void $ runD3 do
-    container <- select "#d3-sim-psd3"
-    renderTree container (simulationAST "#06b6d4" initialD3Nodes)
+  void $ rerender "#d3-sim-psd3" (simulationTree "#06b6d4" initialD3Nodes)
 
   -- Register consumer - just ticks and renders, no state management needed
   _ <- C.register coord
     { tick: simulationConsumer sim 0.001 do
         -- Get nodes (simulation has updated x/y/vx/vy internally)
         currentNodes <- Sim.getNodes sim
-        -- Render via PSD3
-        void $ runD3 do
-          container <- select "#d3-sim-psd3"
-          renderTree container (simulationAST "#06b6d4" currentNodes)
-    , onComplete: log "✓ D3 simulation (PSD3) converged!"
+        -- Render via HATS
+        void $ rerender "#d3-sim-psd3" (simulationTree "#06b6d4" currentNodes)
+    , onComplete: log "✓ D3 simulation (HATS) converged!"
     }
   pure unit
 
@@ -179,20 +173,16 @@ setupWASMSimulationPSD3 coord = do
   log $ "  WASM Entered: " <> show (map _.label result.nodes.entered)
 
   -- Initial render
-  void $ runD3 do
-    container <- select "#wasm-sim-psd3"
-    renderTree container (simulationAST "#f97316" initialWASMNodes)
+  void $ rerender "#wasm-sim-psd3" (simulationTree "#f97316" initialWASMNodes)
 
   -- Register consumer
   _ <- C.register coord
     { tick: wasmConsumer sim 0.001 do
         -- Get nodes - SAME interface as D3!
         currentNodes <- WASMSetup.getNodes sim
-        -- Render via PSD3
-        void $ runD3 do
-          container <- select "#wasm-sim-psd3"
-          renderTree container (simulationAST "#f97316" currentNodes)
-    , onComplete: log "✓ WASM simulation (PSD3) converged!"
+        -- Render via HATS
+        void $ rerender "#wasm-sim-psd3" (simulationTree "#f97316" currentNodes)
+    , onComplete: log "✓ WASM simulation (HATS) converged!"
     }
   pure unit
 
@@ -200,19 +190,18 @@ setupWASMSimulationPSD3 coord = do
 -- Shared Visualization (works for BOTH engines!)
 -- =============================================================================
 
--- | AST for simulation visualization - works for ANY SimulationNode
+-- | HATS tree for simulation visualization - works for ANY SimulationNode
 -- | Pure function: nodes → visualization spec
-simulationAST :: forall r. String -> Array (Sim.SimulationNode r) -> A.AST (Sim.SimulationNode r)
-simulationAST color nodes =
-  A.joinData "sim-nodes" "circle" nodes nodeTemplate
-  where
-    nodeTemplate :: Sim.SimulationNode r -> A.Tree (Sim.SimulationNode r)
-    nodeTemplate _ = A.elem Circle
-      [ Attr.attr "cx" _.x showNumD
-      , Attr.attr "cy" _.y showNumD
-      , Attr.attrStatic "r" "12"
-      , Attr.attrStatic "fill" color
+simulationTree :: forall r. String -> Array (Sim.SimulationNode r) -> Tree
+simulationTree color nodes =
+  forEach "sim-nodes" Circle nodes (\n -> show n.id) \node ->
+    elem Circle
+      [ thunkedNum "cx" node.x
+      , thunkedNum "cy" node.y
+      , staticStr "r" "12"
+      , staticStr "fill" color
       ]
+      []
 
 -- =============================================================================
 -- Helpers
