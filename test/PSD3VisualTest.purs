@@ -23,7 +23,7 @@ import Effect.Console (log)
 -- HATS Visualization
 import Hylograph.HATS (Tree, forEach, elem, thunkedNum, staticStr)
 import Hylograph.HATS.InterpreterTick (rerender)
-import Hylograph.Internal.Selection.Types (ElementType(..))
+import Hylograph.Internal.Element.Types (ElementType(..))
 
 -- Coordinator and Consumers
 import Hylograph.Transition.Coordinator (Coordinator, Milliseconds, TickResult(..), create, register, start) as C
