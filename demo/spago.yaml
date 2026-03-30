@@ -1,6 +1,9 @@
 workspace:
-  # Standalone workspace - uses all packages from registry
-  extraPackages: {}
+  extraPackages:
+    hylograph-simulation:
+      path: ..
+    hylograph-simulation-halogen:
+      path: ../../purescript-hylograph-simulation-halogen
 
 package:
   name: hylograph-simulation-demo
@@ -15,10 +18,9 @@ package:
     - halogen: ">=7.0.0 <8.0.0"
     - halogen-svg-elems: ">=8.0.0 <9.0.0"
     - hylograph-d3-kernel: ">=0.1.0 <0.2.0"
-    - hylograph-selection: ">=0.1.1 <0.2.0"
-    - hylograph-simulation: ">=0.1.0 <0.2.0"
-    - hylograph-simulation-core: ">=0.1.0 <0.2.0"
-    - hylograph-simulation-halogen: ">=0.1.0 <0.2.0"
+    - hylograph-selection: ">=0.4.0 <0.5.0"
+    - hylograph-simulation: "*"
+    - hylograph-simulation-halogen: "*"
     - integers: ">=6.0.0 <7.0.0"
     - maybe: ">=6.0.0 <7.0.0"
     - nullable: ">=6.0.0 <7.0.0"
