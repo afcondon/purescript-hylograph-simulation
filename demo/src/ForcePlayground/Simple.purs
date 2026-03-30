@@ -67,10 +67,8 @@ import Hylograph.HATS.Friendly as F
 import Hylograph.HATS.InterpreterTick (rerender, clearContainer) as HATS
 import Hylograph.Internal.Behavior.Types (DragConfig(..), simulationDragNested)
 import Hylograph.Internal.Behavior.FFI (registerSimulation_, unregisterSimulation_)
-import Hylograph.Internal.Selection.Types (ElementType(..))
--- Old AST import - only for nodeTemplate passed to runSimulation (not actually used when renderNodes: false)
-import Hylograph.AST as A
-import Hylograph.Expr.Friendly (num, text, attr, cx, cy, r, fill, stroke, strokeWidth, opacity) as OldF
+import Hylograph.Internal.Element.Types (ElementType(..))
+-- NOTE: Hylograph.AST and Hylograph.Expr.Friendly removed — replaced by HATS
 
 -- High-level simulation imports
 import Hylograph.Simulation (runSimulation, Engine(..), SimulationHandle)
@@ -219,20 +217,7 @@ unregisterSimulation = unregisterSimulation_ simulationId
 -- Simulation Creation
 -- =============================================================================
 
--- | Node template for runSimulation API (not used when renderNodes: false)
--- | Uses old AST to match runSimulation's expected type signature
-networkNodeTemplate :: SimulationNode NetworkNodeRow -> A.Tree (SimulationNode NetworkNodeRow)
-networkNodeTemplate node =
-  A.elem Circle
-    [ OldF.cx $ OldF.num node.x
-    , OldF.cy $ OldF.num node.y
-    , OldF.r $ OldF.num (nodeRadius node)
-    , OldF.fill $ OldF.text (categoryColor node.group)
-    , OldF.stroke $ OldF.text "#fff"
-    , OldF.strokeWidth $ OldF.num 1.5
-    , OldF.opacity $ OldF.num 1.0
-    , OldF.attr "style" $ OldF.text "cursor: grab;"
-    ]
+-- NOTE: networkNodeTemplate removed — was dead code using old AST API
 
 -- | Create a simulation using the high-level runSimulation API
 -- |
