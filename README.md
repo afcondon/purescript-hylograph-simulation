@@ -1,6 +1,6 @@
 # purescript-hylograph-simulation
 
-[![Force Playground Demo](../../site/lib-simulation/public/demo.jpeg)](/#/force-playground)
+[![Force Playground Demo](https://afcondon.github.io/purescript-hylograph-demos/thumbnails/forces.jpg)](https://afcondon.github.io/purescript-hylograph-demos/simulation/)
 
 Force-directed graph simulation with unified D3 and WASM engine support.
 
