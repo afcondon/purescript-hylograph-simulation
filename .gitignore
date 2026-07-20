@@ -19,3 +19,4 @@ Thumbs.db
 
 # Spago lock (generated)
 spago.lock
+.direnv/
