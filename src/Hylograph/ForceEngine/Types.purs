@@ -1,19 +1,15 @@
--- | Pure Force Engine Types
+-- | Force configuration for force-directed layouts.
 -- |
--- | These types model the data structures needed for force-directed layouts.
--- | The force calculations are pure functions over these structures.
+-- | `ForceSpec` and its per-force configuration records — what forces to
+-- | apply and how strongly. Pure data; interpreted by
+-- | `Hylograph.ForceEngine.Simulation`.
 -- |
--- | Key insight: D3's force functions just mutate vx/vy on nodes.
--- | We can call them directly without the simulation wrapper.
+-- | This module does NOT define the node or link types. Those live in
+-- | `Hylograph.ForceEngine.Simulation` as `SimulationNode` and `Link`,
+-- | which is what `setNodes` and `setLinks` consume.
 module Hylograph.ForceEngine.Types
-  ( -- * Node Types
-    SimNode
-    -- * Link Types
-  , SimLink
-  , RawLink
-    -- * Simulation State
-  , SimulationState
-  , defaultSimParams
+  ( -- * Simulation Parameters
+    defaultSimParams
     -- * Force Configurations
   , ManyBodyConfig
   , defaultManyBody
@@ -42,60 +38,20 @@ import Prelude
 
 
 -- =============================================================================
--- Core Node Type
+-- Simulation Parameters
 -- =============================================================================
-
--- | A simulation node with position and velocity.
--- | This is the minimal structure that D3 force functions expect.
--- |
--- | The `extra` row allows extending with application-specific data.
--- | Note: vx, vy, index are added by the FFI initialization function.
-type SimNode extra =
-  { x :: Number      -- Current x position
-  , y :: Number      -- Current y position
-  , vx :: Number     -- X velocity (modified by forces)
-  , vy :: Number     -- Y velocity (modified by forces)
-  , index :: Int     -- Node index in array (set by initialization)
-  | extra
-  }
-
--- =============================================================================
--- Link Type
--- =============================================================================
-
--- | A link between nodes.
--- | Before simulation: source/target are indices or IDs
--- | After swizzling: source/target are node references
-type SimLink nodeRow linkData =
-  { source :: { x :: Number, y :: Number | nodeRow }
-  , target :: { x :: Number, y :: Number | nodeRow }
-  , index :: Int
-  | linkData
-  }
-
--- | Raw link with source/target as indices (pre-swizzle)
-type RawLink linkData =
-  { source :: Int
-  , target :: Int
-  | linkData
-  }
-
--- =============================================================================
--- Simulation State
--- =============================================================================
-
--- | The complete state of a force simulation.
--- | We manage this ourselves instead of letting D3 do it.
-type SimulationState nodeRow linkData =
-  { nodes :: Array (SimNode nodeRow)
-  , links :: Array (RawLink linkData)
-  , alpha :: Number           -- Current "temperature" (1.0 = hot, 0.0 = frozen)
-  , alphaMin :: Number        -- Stop when alpha falls below this
-  , alphaDecay :: Number      -- How fast alpha decreases (multiplier per tick)
-  , alphaTarget :: Number     -- Alpha moves toward this value
-  , velocityDecay :: Number   -- Friction (0.0 = no friction, 1.0 = stop immediately)
-  , running :: Boolean        -- Is the simulation active?
-  }
+--
+-- Note: the node, link and simulation-state types that used to live here
+-- were removed in 0.6.0. They had no importers anywhere in the ecosystem
+-- and duplicated the types in hylograph-d3-kernel, while carrying the more
+-- inviting names — `SimNode` next to the live `SimulationNode`, in a
+-- module called `Types`. That combination actively misled: the shapes are
+-- subtly incompatible (`index` where the live type has `id`, and no
+-- `fx`/`fy`), so code written against them typechecks in isolation and
+-- cannot be handed to `Sim.setNodes`.
+--
+-- The live types are in `Hylograph.ForceEngine.Simulation`:
+-- `SimulationNode` and `Link`.
 
 -- | Default simulation parameters
 defaultSimParams ::

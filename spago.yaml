@@ -7,7 +7,7 @@ package:
   name: hylograph-simulation
   description: Force-directed graph simulation for PureScript D3
   publish:
-    version: 0.5.0
+    version: 0.6.0
     license: MIT
     location:
       githubOwner: afcondon

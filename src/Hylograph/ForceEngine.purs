@@ -39,11 +39,7 @@ module Hylograph.ForceEngine
 -- Import Hylograph.ForceEngine.Halogen from that package for subscribeToSimulation
 
 import Hylograph.ForceEngine.Types
-  ( SimNode
-  , SimLink
-  , RawLink
-  , SimulationState
-  , defaultSimParams
+  ( defaultSimParams
   , ManyBodyConfig
   , CollideConfig
   , LinkConfig

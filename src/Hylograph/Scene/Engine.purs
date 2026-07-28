@@ -72,7 +72,7 @@ import Hylograph.Transition.Tick as Tick
 -- |
 -- | Example adapter for ce-website:
 -- | ```purescript
--- | mkAdapter :: CESimulation -> EngineAdapter SimNode
+-- | mkAdapter :: CESimulation -> EngineAdapter (SimulationNode row)
 -- | mkAdapter sim =
 -- |   { getNodes: Sim.getNodes sim
 -- |   , capturePositions: \nodes -> Object.fromFoldable $
