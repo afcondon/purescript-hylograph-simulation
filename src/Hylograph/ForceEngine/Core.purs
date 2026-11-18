@@ -23,6 +23,9 @@ module Hylograph.ForceEngine.Core
   , createForceXDynamic
   , createForceYDynamic
   , createLinkDynamic
+  , createLinkPerLink
+  , createForceXFiltered
+  , createForceYFiltered
     -- * Optimized Grid Forces (no FFI callbacks)
   , createForceXGrid
   , createForceYGrid
@@ -81,6 +84,9 @@ foreign import createCollideDynamic_ :: forall node. CollideDynamicConfig node -
 foreign import createForceXDynamic_ :: forall node. ForceXDynamicConfig node -> ForceHandle
 foreign import createForceYDynamic_ :: forall node. ForceYDynamicConfig node -> ForceHandle
 foreign import createLinkDynamic_ :: forall link. LinkDynamicConfig link -> ForceHandle
+foreign import createForceXFiltered_ :: forall node. { xAccessor :: node -> Number, strength :: Number, filter :: node -> Boolean } -> ForceHandle
+foreign import createForceYFiltered_ :: forall node. { yAccessor :: node -> Number, strength :: Number, filter :: node -> Boolean } -> ForceHandle
+foreign import createLinkPerLink_ :: { distances :: Array Number, strengths :: Array Number, iterations :: Int } -> ForceHandle
 
 -- Optimized Grid force creation (no PureScript callbacks - reads node properties directly)
 foreign import createForceXGrid_ :: Number -> ForceHandle
@@ -175,6 +181,21 @@ createForceYDynamic = createForceYDynamic_
 createLinkDynamic :: forall link. LinkDynamicConfig link -> ForceHandle
 createLinkDynamic = createLinkDynamic_
 
+-- | Create a link force with one distance and one strength per link, as
+-- | arrays in link order.
+createLinkPerLink :: { distances :: Array Number, strengths :: Array Number, iterations :: Int } -> ForceHandle
+createLinkPerLink = createLinkPerLink_
+
+-- | Create an X positioning force with a per-node target, applied only to
+-- | nodes the filter accepts.
+createForceXFiltered :: forall node. { xAccessor :: node -> Number, strength :: Number, filter :: node -> Boolean } -> ForceHandle
+createForceXFiltered = createForceXFiltered_
+
+-- | Create a Y positioning force with a per-node target, applied only to
+-- | nodes the filter accepts.
+createForceYFiltered :: forall node. { yAccessor :: node -> Number, strength :: Number, filter :: node -> Boolean } -> ForceHandle
+createForceYFiltered = createForceYFiltered_
+
 -- =============================================================================
 -- Optimized Grid Forces (no FFI callbacks)
 -- =============================================================================
@@ -251,7 +272,7 @@ simulationTick :: forall r.
   , alphaMin :: Number
   , alphaDecay :: Number
   , alphaTarget :: Number
-  , velocityDecay :: Number
+  , velocityRetention :: Number
   }
   -> Effect Number  -- Returns new alpha
 simulationTick params = do
@@ -259,7 +280,7 @@ simulationTick params = do
   applyForces params.forces params.alpha
 
   -- Integrate positions (velocity decay + position update)
-  integratePositions params.nodes params.velocityDecay
+  integratePositions params.nodes params.velocityRetention
 
   -- Return decayed alpha
   pure $ decayAlpha params.alpha params.alphaMin params.alphaDecay params.alphaTarget

@@ -47,7 +47,7 @@ type SimulationParams = {
   , alphaTarget   :: Number  -- Target energy (simulation runs until alpha ≤ alphaTarget)
   , alphaMin      :: Number  -- Minimum alpha before stopping
   , alphaDecay    :: Number  -- How quickly energy dissipates per tick
-  , velocityDecay :: Number  -- Friction/damping factor for node velocities
+  , velocityRetention :: Number  -- Share of its velocity a node keeps each tick (1 - d3's velocityDecay)
 }
 
 -- | Default simulation parameters (matches d3-force defaults)
@@ -57,21 +57,21 @@ defaultSimParams = {
   , alphaTarget: 0.0
   , alphaMin: 0.001
   , alphaDecay: 0.0228     -- ~300 iterations to reach alphaMin
-  , velocityDecay: 0.4     -- Moderate friction
+  , velocityRetention: 0.4     -- Keeps 40% a tick
 }
 
 -- | Fast convergence parameters (for quick transitions)
 fastSimParams :: SimulationParams
 fastSimParams = defaultSimParams {
     alphaDecay = 0.05      -- ~100 iterations
-  , velocityDecay = 0.6    -- Higher friction
+  , velocityRetention = 0.6    -- Keeps 60% a tick: less friction, more momentum
 }
 
 -- | Slow convergence parameters (for smooth, gradual layouts)
 slowSimParams :: SimulationParams
 slowSimParams = defaultSimParams {
     alphaDecay = 0.01      -- ~500 iterations
-  , velocityDecay = 0.2    -- Lower friction
+  , velocityRetention = 0.2    -- Keeps 20% a tick: more friction
 }
 
 -- | Complete scene configuration

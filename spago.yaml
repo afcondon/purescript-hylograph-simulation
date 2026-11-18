@@ -17,6 +17,7 @@ package:
     - arrays: ">=7.3.0 <8.0.0"
     - console: ">=6.1.0 <7.0.0"
     - effect: ">=4.0.0 <5.0.0"
+    - exceptions: ">=6.1.0 <7.0.0"
     - foldable-traversable: ">=6.0.0 <7.0.0"
     - foreign-object: ">=4.1.0 <5.0.0"
     - hylograph-selection: ">=0.5.0 <0.6.0"

@@ -186,7 +186,7 @@ type SimConfig =
   { alphaMin :: Number
   , alphaDecay :: Number
   , alphaTarget :: Number
-  , velocityDecay :: Number
+  , velocityRetention :: Number
   }
 
 -- | Default simulation configuration
@@ -195,7 +195,7 @@ defaultConfig =
   { alphaMin: defaultSimParams.alphaMin
   , alphaDecay: defaultSimParams.alphaDecay
   , alphaTarget: defaultSimParams.alphaTarget
-  , velocityDecay: defaultSimParams.velocityDecay
+  , velocityRetention: defaultSimParams.velocityRetention
   }
 
 -- =============================================================================
@@ -431,7 +431,7 @@ tick sim = do
   Core.applyForces forceHandles alpha
 
   -- Integrate positions
-  Core.integratePositions nodes sim.config.velocityDecay
+  Core.integratePositions nodes sim.config.velocityRetention
 
   -- Decay alpha
   let newAlpha = Core.decayAlpha alpha sim.config.alphaMin sim.config.alphaDecay sim.config.alphaTarget

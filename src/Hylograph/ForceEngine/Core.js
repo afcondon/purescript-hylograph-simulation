@@ -77,6 +77,18 @@ export function createLinkDynamic_(config) {
   return force;
 }
 
+// Create a link force with one distance and one strength per link, given as
+// arrays in link order (the Setup evaluates them; nothing calls back).
+// Uses .id(d => d.id) for same reason as createLink_
+export function createLinkPerLink_(config) {
+  const force = forceLink()
+    .id(d => d.id)
+    .distance(function(_link, i) { return config.distances[i]; })
+    .strength(function(_link, i) { return config.strengths[i]; })
+    .iterations(config.iterations);
+  return force;
+}
+
 // Create a center force
 export function createCenter_(config) {
   const force = forceCenter(config.x, config.y)
@@ -162,6 +174,21 @@ export function createForceYDynamic_(config) {
     })
     .strength(config.strength);
   return force;
+}
+
+// Create an X positioning force with a per-node target and a filter:
+// strength 0 for nodes the filter rejects.
+export function createForceXFiltered_(config) {
+  return forceX()
+    .x(function(d) { return config.xAccessor(d); })
+    .strength(function(d) { return config.filter(d) ? config.strength : 0; });
+}
+
+// Create a Y positioning force with a per-node target and a filter
+export function createForceYFiltered_(config) {
+  return forceY()
+    .y(function(d) { return config.yAccessor(d); })
+    .strength(function(d) { return config.filter(d) ? config.strength : 0; });
 }
 
 // =============================================================================

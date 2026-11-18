@@ -3,8 +3,9 @@
 -- | High-performance force simulation using Rust/WebAssembly.
 -- | Drop-in replacement for the D3.js-based simulation.
 -- |
--- | Provides 3-4x speedup over D3.js for large graphs (10,000+ nodes)
--- | by offloading force calculations to compiled WebAssembly.
+-- | Force calculations are offloaded to compiled WebAssembly. Informally
+-- | observed to be faster than the D3 kernel on large graphs; no benchmark
+-- | is stored and the figure has not been re-measured.
 -- |
 -- | Usage:
 -- | ```purescript

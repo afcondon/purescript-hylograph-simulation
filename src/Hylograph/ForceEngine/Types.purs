@@ -59,14 +59,14 @@ defaultSimParams ::
   , alphaMin :: Number
   , alphaDecay :: Number
   , alphaTarget :: Number
-  , velocityDecay :: Number
+  , velocityRetention :: Number
   }
 defaultSimParams =
   { alpha: 1.0
   , alphaMin: 0.001
   , alphaDecay: 0.01  -- Slower cooling than D3 default (0.0228) for better settling
   , alphaTarget: 0.0
-  , velocityDecay: 0.4  -- D3's default
+  , velocityRetention: 0.4  -- the share of velocity kept each tick (d3's own default keeps 0.6)
   }
 
 -- =============================================================================

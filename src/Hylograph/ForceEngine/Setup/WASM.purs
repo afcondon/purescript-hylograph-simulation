@@ -3,10 +3,26 @@
 -- | Declarative force configuration for WASM simulation engine.
 -- | Uses the same Setup types as D3, providing functional parity.
 -- |
--- | Key differences from D3:
--- | - WASM has fixed force types (one of each, not multiple named)
--- | - Dynamic (per-node) values use static fallback
--- | - Filters are not supported
+-- | What a `Setup` means here, force by force, is what it means to the D3
+-- | engine (`Hylograph.ForceEngine.Setup.applySetup`):
+-- | - any number of forces of any type; a later force replaces an earlier
+-- |   one of the same name, and each tick applies them in name order (the D3
+-- |   engine keeps them in a `Map` keyed by name);
+-- | - links name their endpoints by node `id`, not by array position.
+-- |
+-- | This engine also runs what the D3 engine cannot: Towards, RectCollide,
+-- | Contain, Cohesion, Directional, ManyBody scoped by group, and a Collide
+-- | with a filter or with its strength scaled by alpha.
+-- |
+-- | `Dynamic` values, filters, groups and regions are evaluated once per
+-- | node (or per link) when the setup is applied and handed to the kernel
+-- | as arrays; the kernel never calls back into JavaScript. A `dynamic`
+-- | strength on ManyBody, PositionX/Y or Radial, and a `dynamic` Radial
+-- | radius, are honoured here; the D3 engine reads those as 0.
+-- |
+-- | The kernel is deterministic: the same nodes, links and setup give the
+-- | same positions on every run. (The D3 engine is not, when nodes coincide:
+-- | it separates them with `Math.random`.)
 -- |
 -- | Example:
 -- | ```purescript
@@ -42,7 +58,19 @@ module Hylograph.ForceEngine.Setup.WASM
   , applySetup
   , applySetupWithData
 
+    -- * Morphing, snapshots, convergence
+  , retarget
+  , retargetTo
+  , reradius
+  , snapshot
+  , restore
+  , kineticEnergy
+  , maxDisplacement
+  , maxAcceleration
+  , settled
+
     -- * Direct Operations
+  , step
   , tick
   , tickN
   , getNodes
@@ -57,8 +85,13 @@ module Hylograph.ForceEngine.Setup.WASM
 import Prelude
 
 import Data.Array as Array
-import Data.Maybe (Maybe(..))
 import Data.Foldable (for_)
+import Data.Map (Map)
+import Data.Map as Map
+import Data.Maybe (Maybe(..))
+import Data.Number (nan)
+import Data.Traversable (traverse)
+import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Console (warn)
@@ -85,13 +118,20 @@ import Hylograph.ForceEngine.Setup
   ) as Exports
 import Hylograph.ForceEngine.Setup
   ( Setup
-  , ForceConfig
-  , ForceType(..)
+  , ForceConfig(..)
+  , LinkEnds
+  , LinkStrength(..)
+  , ManyBodyScope(..)
+  , Region(..)
   , Value(..)
   , GUPResult
   , GUPLinkResult
   , computeNodeGUP
   , computeLinkGUP
+  , forceName
+  , linkStrengths
+  , linkValues
+  , resolveLinks
   , valueToNumber
   , getForces
   , getParams
@@ -107,6 +147,7 @@ type WASMSim r =
   { wasmSim :: FFI.WASMSimulation
   , nodesRef :: Ref (Array (SimulationNode r))
   , linksRef :: Ref (Array { source :: Int, target :: Int })
+  , forceIds :: Ref (Map String FFI.ForceId)  -- the kernel's id for each named force
   }
 
 -- =============================================================================
@@ -134,17 +175,18 @@ create
 create nodes links = do
   wasmSim <- FFI.create (Array.length nodes)
 
-  -- Sync initial positions to WASM
-  FFI.syncPositionsToWasm wasmSim nodes
+  -- Sync initial positions, velocities and pinning to WASM
+  FFI.syncNodesToWasm wasmSim nodes
 
   -- Set links
-  FFI.setLinksFromRecords wasmSim links
+  setLinks wasmSim nodes links
 
   -- Create refs
   nodesRef <- Ref.new nodes
   linksRef <- Ref.new links
+  forceIds <- Ref.new Map.empty
 
-  pure { wasmSim, nodesRef, linksRef }
+  pure { wasmSim, nodesRef, linksRef, forceIds }
 
 -- | Create an empty WASM simulation (for use with applySetupWithData)
 createEmpty :: forall r. Effect (WASMSim r)
@@ -152,7 +194,8 @@ createEmpty = do
   wasmSim <- FFI.create 0
   nodesRef <- Ref.new []
   linksRef <- Ref.new []
-  pure { wasmSim, nodesRef, linksRef }
+  forceIds <- Ref.new Map.empty
+  pure { wasmSim, nodesRef, linksRef, forceIds }
 
 -- | Free WASM simulation memory
 free :: forall r. WASMSim r -> Effect Unit
@@ -164,127 +207,241 @@ free sim = FFI.free sim.wasmSim
 
 -- | Apply a Setup to a WASM simulation.
 -- |
--- | Maps declarative force configuration to WASM kernel calls.
--- | This is idempotent - can be called repeatedly with different setups.
+-- | Maps declarative force configuration to WASM kernel calls: the kernel's
+-- | force list is emptied and refilled from the setup, so this is idempotent
+-- | and can be called repeatedly with different setups. `Dynamic` values and
+-- | filters are evaluated against the simulation's current nodes; apply the
+-- | setup again after changing what they read.
 -- |
--- | Limitations vs D3:
--- | - Only one force of each type (first wins if multiple specified)
--- | - Dynamic values fall back to static (with warning)
--- | - Filters are ignored (with warning)
--- | - ForceRadial is not supported (warning logged)
+-- | See the module header for how this compares with the D3 engine.
 applySetup
   :: forall r
    . Setup (SimulationNode r)
   -> WASMSim r
   -> Effect Unit
 applySetup setupConfig sim = do
-  -- Track which force types are enabled
-  let forces = getForces setupConfig
+  nodes <- Ref.read sim.nodesRef
+  links <- Ref.read sim.linksRef
+  let ends = resolveLinks nodes links
 
-  -- Find first force of each type
-  let manyBodyForce = Array.find (\f -> f.forceType == ForceManyBody) forces
-  let collideForce = Array.find (\f -> f.forceType == ForceCollide) forces
-  let linkForce = Array.find (\f -> f.forceType == ForceLink) forces
-  let centerForce = Array.find (\f -> f.forceType == ForceCenter) forces
-  let posXForce = Array.find (\f -> f.forceType == ForcePositionX) forces
-  let posYForce = Array.find (\f -> f.forceType == ForcePositionY) forces
-  let radialForce = Array.find (\f -> f.forceType == ForceRadial) forces
-
-  -- Warn about unsupported features
-  for_ radialForce \_ ->
-    warn "WASM Setup: ForceRadial is not supported by WASM kernel"
-
-  -- Configure each force type
-  for_ manyBodyForce (configureManyBody sim.wasmSim)
-  for_ collideForce (configureCollide sim.wasmSim)
-  for_ linkForce (configureLinks sim.wasmSim)
-  for_ centerForce (configureCenter sim.wasmSim)
-  for_ posXForce (configureForceX sim.wasmSim)
-  for_ posYForce (configureForceY sim.wasmSim)
-
-  -- Enable/disable forces based on what's in setup
-  FFI.enableForces sim.wasmSim
-    { manyBody: Array.any (\f -> f.forceType == ForceManyBody) forces
-    , links: Array.any (\f -> f.forceType == ForceLink) forces
-    , center: Array.any (\f -> f.forceType == ForceCenter) forces
-    }
+  -- Every force goes in the kernel's force list; its six built-in forces
+  -- (three of them on by default) are not used.
+  FFI.enableForcesAll sim.wasmSim
+    { manyBody: false, links: false, center: false, forceX: false, forceY: false, collide: false }
+  FFI.clearForces sim.wasmSim
+  ids <- traverse
+    (\fc -> Tuple (forceName fc) <$> addForce sim.wasmSim nodes ends fc)
+    (inApplicationOrder (getForces setupConfig))
+  Ref.write (Map.fromFoldable ids) sim.forceIds
 
   -- Apply simulation params
   let params = getParams setupConfig
   FFI.setAlpha sim.wasmSim params.alpha
+  FFI.setAlphaMin sim.wasmSim params.alphaMin
   FFI.setAlphaDecay sim.wasmSim params.alphaDecay
-  FFI.setVelocityDecay sim.wasmSim params.velocityDecay
+  FFI.setAlphaTarget sim.wasmSim params.alphaTarget
+  FFI.setVelocityRetention sim.wasmSim params.velocityRetention
 
--- | Configure many-body force from ForceConfig
-configureManyBody :: forall node. FFI.WASMSimulation -> ForceConfig node -> Effect Unit
-configureManyBody wasmSim fc = do
-  warnIfDynamic fc.strength "ManyBody strength"
-  warnIfFiltered fc "ManyBody"
-  FFI.configureManyBody wasmSim
-    { strength: valueToNumber fc.strength
-    , theta: fc.theta
-    , distanceMin: fc.distanceMin
-    , distanceMax: fc.distanceMax
-    }
+-- | The forces of a setup as the D3 engine would apply them. It keeps forces
+-- | in a `Map` keyed by name, so a later force replaces an earlier one of the
+-- | same name and each tick runs them in name order, not in setup order.
+inApplicationOrder :: forall node. Array (ForceConfig node) -> Array (ForceConfig node)
+inApplicationOrder forces =
+  Array.fromFoldable $ Map.values $ Map.fromFoldable $ map (\fc -> Tuple (forceName fc) fc) forces
 
--- | Configure collide force from ForceConfig
--- | Note: Collide force support requires FFI additions to WASM module
-configureCollide :: forall node. FFI.WASMSimulation -> ForceConfig node -> Effect Unit
-configureCollide _wasmSim fc = do
-  warnIfDynamic fc.radius "Collide radius"
-  warnIfDynamic fc.strength "Collide strength"
-  warn "WASM Setup: Collide force not yet implemented in FFI"
+-- | Add one force of a setup to the kernel's force list, evaluating its
+-- | per-node and per-link values over the nodes and the links' ends.
+addForce
+  :: forall r
+   . FFI.WASMSimulation
+  -> Array (SimulationNode r)
+  -> Array (LinkEnds (SimulationNode r))
+  -> ForceConfig (SimulationNode r)
+  -> Effect FFI.ForceId
+addForce wasmSim nodes ends = case _ of
+  ManyBodyForce c -> do
+    force <- FFI.addManyBody wasmSim
+      { strength: valueToNumber c.strength
+      , theta: c.theta
+      , distanceMin: c.distanceMin
+      , distanceMax: c.distanceMax
+      }
+    perNode c.strength (FFI.setForceStrengths wasmSim force)
+    filtered c.filter force
+    case c.scope of
+      AllPairs -> pure unit
+      WithinGroups group -> do
+        void $ FFI.setForceGroups wasmSim force (groupsOf group)
+        void $ FFI.setManyBodyScope wasmSim force FFI.WithinGroups
+      BetweenGroups group -> do
+        void $ FFI.setForceGroups wasmSim force (groupsOf group)
+        void $ FFI.setManyBodyScope wasmSim force FFI.BetweenGroups
+    pure force
 
--- | Configure links force from ForceConfig
-configureLinks :: forall node. FFI.WASMSimulation -> ForceConfig node -> Effect Unit
-configureLinks wasmSim fc = do
-  warnIfDynamic fc.distance "Link distance"
-  warnIfDynamic fc.strength "Link strength"
-  FFI.configureLinks wasmSim
-    { distance: valueToNumber fc.distance
-    , strength: valueToNumber fc.strength
-    , iterations: fc.iterations
-    }
+  CollideForce c -> do
+    force <- FFI.addCollide wasmSim
+      { radius: valueToNumber c.radius
+      , strength: c.strength
+      , iterations: c.iterations
+      }
+    perNode c.radius (FFI.setForceRadii wasmSim force)
+    for_ c.filter \keep -> void $ FFI.setCollideFilter wasmSim force (map keep nodes)
+    when c.alphaScaled $ void $ FFI.setCollideAlphaScaled wasmSim force true
+    pure force
 
--- | Configure center force from ForceConfig
-configureCenter :: forall node. FFI.WASMSimulation -> ForceConfig node -> Effect Unit
-configureCenter wasmSim fc = do
-  warnIfDynamic fc.x "Center x"
-  warnIfDynamic fc.y "Center y"
-  warnIfDynamic fc.strength "Center strength"
-  FFI.configureCenter wasmSim
-    { x: valueToNumber fc.x
-    , y: valueToNumber fc.y
-    , strength: valueToNumber fc.strength
-    }
+  LinkForce c -> do
+    force <- FFI.addLinks wasmSim
+      { distance: valueToNumber c.distance
+      , strength: 1.0
+      , iterations: c.iterations
+      }
+    perLink c.distance (FFI.setForceDistances wasmSim force)
+    case c.strength of
+      LinkStrength (Static strength) ->
+        void $ FFI.setForceStrengths wasmSim force (map (const strength) ends)
+      strength ->
+        void $ FFI.setForceStrengths wasmSim force (linkStrengths strength ends)
+    pure force
 
--- | Configure forceX from ForceConfig
-configureForceX :: forall node. FFI.WASMSimulation -> ForceConfig node -> Effect Unit
-configureForceX _wasmSim fc = do
-  warnIfDynamic fc.x "ForceX target"
-  warnIfDynamic fc.strength "ForceX strength"
-  -- Note: forceX/forceY would need FFI additions to WASM module
-  pure unit
+  CenterForce c ->
+    FFI.addCenter wasmSim { x: c.x, y: c.y, strength: c.strength }
 
--- | Configure forceY from ForceConfig
-configureForceY :: forall node. FFI.WASMSimulation -> ForceConfig node -> Effect Unit
-configureForceY _wasmSim fc = do
-  warnIfDynamic fc.y "ForceY target"
-  warnIfDynamic fc.strength "ForceY strength"
-  -- Note: forceX/forceY would need FFI additions to WASM module
-  pure unit
+  PositionXForce c -> do
+    force <- FFI.addForceX wasmSim
+      { target: valueToNumber c.target
+      , strength: valueToNumber c.strength
+      }
+    perNode c.target (FFI.setForceTargets wasmSim force)
+    perNode c.strength (FFI.setForceStrengths wasmSim force)
+    filtered c.filter force
+    pure force
 
--- | Warn if a value is dynamic (WASM doesn't support per-node values)
-warnIfDynamic :: forall node a. Value node a -> String -> Effect Unit
-warnIfDynamic (Dynamic _) name =
-  warn $ "WASM Setup: " <> name <> " uses dynamic value, falling back to static"
-warnIfDynamic (Static _) _ = pure unit
+  PositionYForce c -> do
+    force <- FFI.addForceY wasmSim
+      { target: valueToNumber c.target
+      , strength: valueToNumber c.strength
+      }
+    perNode c.target (FFI.setForceTargets wasmSim force)
+    perNode c.strength (FFI.setForceStrengths wasmSim force)
+    filtered c.filter force
+    pure force
 
--- | Warn if a force has a filter (WASM doesn't support filters)
-warnIfFiltered :: forall node. ForceConfig node -> String -> Effect Unit
-warnIfFiltered fc name = case fc.filter of
-  Just _ -> warn $ "WASM Setup: " <> name <> " filter is ignored by WASM kernel"
-  Nothing -> pure unit
+  RadialForce c -> do
+    force <- FFI.addRadial wasmSim
+      { radius: valueToNumber c.radius
+      , x: c.x
+      , y: c.y
+      , strength: valueToNumber c.strength
+      }
+    perNode c.radius (FFI.setForceRadii wasmSim force)
+    perNode c.strength (FFI.setForceStrengths wasmSim force)
+    filtered c.filter force
+    pure force
+
+  TowardsForce c -> do
+    force <- FFI.addTowards wasmSim (valueToNumber c.strength)
+    void $ FFI.setForceTargetsXY wasmSim force (flatTargets c.target nodes)
+    perNode c.strength (FFI.setForceStrengths wasmSim force)
+    filtered c.filter force
+    pure force
+
+  RectCollideForce c -> do
+    force <- FFI.addRectCollide wasmSim
+      { halfWidth: valueToNumber c.halfWidth
+      , halfHeight: valueToNumber c.halfHeight
+      , strength: c.strength
+      , iterations: c.iterations
+      }
+    perNode c.halfWidth (FFI.setForceHalfWidths wasmSim force)
+    perNode c.halfHeight (FFI.setForceHalfHeights wasmSim force)
+    pure force
+
+  ContainForce c -> do
+    force <- FFI.addContainment wasmSim { strength: c.strength, hard: c.hard }
+    for_ c.regions case _ of
+      RectRegion rect -> void $ FFI.containmentAddRect wasmSim force rect
+      CircleRegion circle -> void $ FFI.containmentAddCircle wasmSim force circle
+      PolygonRegion vertices -> void $ FFI.containmentAddPolygon wasmSim force vertices
+    void $ FFI.setForceRegions wasmSim force (map c.region nodes)
+    void $ FFI.setForceRadii wasmSim force (case c.radius of
+      Static radius -> map (const radius) nodes
+      Dynamic f -> map f nodes)
+    pure force
+
+  CohesionForce c -> do
+    force <- FFI.addCohesion wasmSim (valueToNumber c.strength)
+    void $ FFI.setForceGroups wasmSim force (groupsOf c.group)
+    perNode c.strength (FFI.setForceStrengths wasmSim force)
+    filtered c.filter force
+    pure force
+
+  DirectionalForce c -> do
+    force <- FFI.addDirectional wasmSim
+      { gap: valueToNumber c.gap
+      , axis: c.axis
+      , strength: valueToNumber c.strength
+      , iterations: c.iterations
+      }
+    perLink c.gap (FFI.setForceGaps wasmSim force)
+    perLink c.strength (FFI.setForceStrengths wasmSim force)
+    pure force
+  where
+  -- A Dynamic value becomes one number per node; a Static one is already
+  -- in the force as added.
+  perNode :: Value (SimulationNode r) Number -> (Array Number -> Effect Boolean) -> Effect Unit
+  perNode value send = case value of
+    Static _ -> pure unit
+    Dynamic f -> void $ send (map f nodes)
+
+  -- Likewise per link.
+  perLink :: Value (LinkEnds (SimulationNode r)) Number -> (Array Number -> Effect Boolean) -> Effect Unit
+  perLink value send = case value of
+    Static _ -> pure unit
+    Dynamic _ -> void $ send (linkValues value ends)
+
+  -- A filter becomes one Boolean per node.
+  filtered :: Maybe (SimulationNode r -> Boolean) -> FFI.ForceId -> Effect Unit
+  filtered filter force = for_ filter \keep -> void $ FFI.setForceMask wasmSim force (map keep nodes)
+
+  -- Groups can be any Int; the kernel gets them renumbered from 0 in order
+  -- of first appearance, which keeps the same nodes together.
+  groupsOf :: (SimulationNode r -> Maybe Int) -> Array (Maybe Int)
+  groupsOf group =
+    let
+      given = map group nodes
+      numbering = Map.fromFoldable $ Array.mapWithIndex (\index g -> Tuple g index) $ Array.nub $ Array.catMaybes given
+    in
+      map (_ >>= \g -> Map.lookup g numbering) given
+
+-- | Targets as the kernel takes them: [x0, y0, x1, y1, ...], NaN for a node
+-- | with none.
+flatTargets :: forall node. (node -> Maybe { x :: Number, y :: Number }) -> Array node -> Array Number
+flatTargets target = Array.concatMap \node -> case target node of
+  Just point -> [ point.x, point.y ]
+  Nothing -> [ nan, nan ]
+
+-- | Hand the links to the kernel. Links name their endpoints by node `id`,
+-- | as they do for the D3 engine; the kernel wants positions in the node
+-- | array. A link naming a node that is not there is left out, with a
+-- | warning (d3-force throws).
+setLinks
+  :: forall r
+   . FFI.WASMSimulation
+  -> Array (SimulationNode r)
+  -> Array { source :: Int, target :: Int }
+  -> Effect Unit
+setLinks wasmSim nodes links = do
+  let
+    indexOfId = Map.fromFoldable $ Array.mapWithIndex (\index node -> Tuple node.id index) nodes
+    endpoints link = ado
+      source <- Map.lookup link.source indexOfId
+      target <- Map.lookup link.target indexOfId
+      in [ source, target ]
+    resolved = Array.mapMaybe endpoints links
+    missing = Array.length links - Array.length resolved
+  when (missing > 0) do
+    warn $ "WASM Setup: " <> show missing <> " link(s) name a node id that is not in the simulation; left out"
+  FFI.setLinks wasmSim (Array.concat resolved)
 
 -- =============================================================================
 -- Apply Setup with Data (GUP semantics)
@@ -333,15 +490,15 @@ applySetupWithData setupConfig desiredNodes desiredLinks sim = do
   when (currentCount /= newCount) do
     FFI.setNodeCount sim.wasmSim newCount
 
-  -- Sync positions to WASM
-  FFI.syncPositionsToWasm sim.wasmSim nodeResult.merged
+  -- Sync positions, velocities and pinning to WASM
+  FFI.syncNodesToWasm sim.wasmSim nodeResult.merged
 
   -- Compute link GUP
   let linkResult = computeLinkGUP currentLinks (toSimpleLinks desiredLinks)
 
   -- Write links to ref and WASM
   Ref.write desiredLinks sim.linksRef
-  FFI.setLinksFromRecords sim.wasmSim desiredLinks
+  setLinks sim.wasmSim nodeResult.merged desiredLinks
 
   -- Apply force configuration
   applySetup setupConfig sim
@@ -367,17 +524,142 @@ toSimpleLinks
 toSimpleLinks = identity
 
 -- =============================================================================
+-- Morphing, snapshots, convergence
+-- =============================================================================
+
+-- | Give a Towards force new targets, by the name it has in the setup,
+-- | without re-applying the setup. Cheap enough to call every tick: one
+-- | array goes to the kernel and overwrites the old targets in place. For
+-- | morphing between layouts. False if the setup has no Towards force of
+-- | that name.
+retarget
+  :: forall r
+   . String
+  -> (SimulationNode r -> Maybe { x :: Number, y :: Number })
+  -> WASMSim r
+  -> Effect Boolean
+retarget name target sim = do
+  ids <- Ref.read sim.forceIds
+  nodes <- Ref.read sim.nodesRef
+  case Map.lookup name ids of
+    Just force -> FFI.setForceTargetsXY sim.wasmSim force (flatTargets target nodes)
+    Nothing -> pure false
+
+-- | `retarget` with the points themselves, one for each node in the order
+-- | of the simulation's nodes (`getNodes`). A node past the end of the array
+-- | is left alone by the force.
+retargetTo
+  :: forall r
+   . String
+  -> Array { x :: Number, y :: Number }
+  -> WASMSim r
+  -> Effect Boolean
+retargetTo name points sim = do
+  ids <- Ref.read sim.forceIds
+  case Map.lookup name ids of
+    Just force -> FFI.setForceTargetsXY sim.wasmSim force (Array.concatMap (\point -> [ point.x, point.y ]) points)
+    Nothing -> pure false
+
+-- | Give a Collide, Radial or Contain force new radii, by the name it has in
+-- | the setup, without re-applying the setup. Cheap enough to call every
+-- | tick. For a collision that grows in as nodes arrive, or shrinks to let
+-- | them pass. False if the setup has no such force of that name.
+reradius
+  :: forall r
+   . String
+  -> (SimulationNode r -> Number)
+  -> WASMSim r
+  -> Effect Boolean
+reradius name radius sim = do
+  ids <- Ref.read sim.forceIds
+  nodes <- Ref.read sim.nodesRef
+  case Map.lookup name ids of
+    Just force -> FFI.setForceRadii sim.wasmSim force (map radius nodes)
+    Nothing -> pure false
+
+-- | Record everything that changes as the simulation runs: positions,
+-- | velocities, pins, alpha and the other parameters, and the state of the
+-- | stream that separates coincident nodes.
+snapshot :: forall r. WASMSim r -> Effect FFI.Snapshot
+snapshot sim = FFI.snapshot sim.wasmSim
+
+-- | Put the simulation back in a recorded state: with the same setup and
+-- | links, the ticks that follow are exactly the ticks that followed the
+-- | snapshot. False, changing nothing, if the snapshot does not fit (it was
+-- | taken with a different number of nodes, or is malformed).
+restore :: forall r. FFI.Snapshot -> WASMSim r -> Effect Boolean
+restore recorded sim = do
+  nodes <- Ref.read sim.nodesRef
+  before <- FFI.snapshot sim.wasmSim
+  ok <- FFI.restore sim.wasmSim recorded
+  count <- FFI.nodeCount sim.wasmSim
+  if ok && count == Array.length nodes then do
+    updated <- FFI.syncNodesFromWasm sim.wasmSim nodes
+    Ref.write updated sim.nodesRef
+    pure true
+  else do
+    void $ FFI.restore sim.wasmSim before
+    pure false
+
+-- | Kinetic energy after the last tick (unit mass per node). Falls toward 0
+-- | as the layout settles.
+kineticEnergy :: forall r. WASMSim r -> Effect Number
+kineticEnergy sim = FFI.kineticEnergy sim.wasmSim
+
+-- | The furthest any node moved during the last tick.
+maxDisplacement :: forall r. WASMSim r -> Effect Number
+maxDisplacement sim = FFI.maxDisplacement sim.wasmSim
+
+-- | The largest change in any node's step between the last two ticks: the
+-- | acceleration it actually underwent.
+-- |
+-- | This is what `kineticEnergy` and `maxDisplacement` cannot see. A node on
+-- | a spring is momentarily still at the far end of every swing, and nodes
+-- | released together swing in step, so both of those vanish there, far from
+-- | rest. The acceleration is then at its largest. 0 until two ticks have
+-- | been made since the simulation was created, restored or resized.
+maxAcceleration :: forall r. WASMSim r -> Effect Number
+maxAcceleration sim = FFI.maxAcceleration sim.wasmSim
+
+-- | Is the simulation at rest? True when, over the last two ticks, no node
+-- | moved further than `step` in a tick and no node's step changed by more
+-- | than `acceleration`. False until two ticks have been made.
+-- |
+-- | It is measured from positions, so it is right whatever moved a node, and
+-- | a node held against a hard region by a force that keeps pushing counts
+-- | as at rest. It says what the last two ticks did: after `retarget`, tick
+-- | before asking.
+-- |
+-- | For a node on a spring of stiffness k (a `towards` of that strength, at
+-- | alpha 1) with velocity retention r, the node is then within
+-- | (acceleration + (1 - r) * (step + acceleration)) / (k * r) of where it
+-- | will stop, and gets no further away. Stop on the first tick it is true.
+settled :: forall r. { step :: Number, acceleration :: Number } -> WASMSim r -> Effect Boolean
+settled tolerance sim = FFI.settled sim.wasmSim tolerance.step tolerance.acceleration
+
+-- =============================================================================
 -- Direct Operations
 -- =============================================================================
+
+-- | Run a single simulation tick and return the nodes where it left them.
+-- | (`tick` returns the new alpha; `tick` followed by `getNodes` copies the
+-- | positions out of the kernel twice.)
+step :: forall r. WASMSim r -> Effect (Array (SimulationNode r))
+step sim = do
+  _ <- FFI.tick sim.wasmSim
+  nodes <- Ref.read sim.nodesRef
+  updatedNodes <- FFI.syncNodesFromWasm sim.wasmSim nodes
+  Ref.write updatedNodes sim.nodesRef
+  pure updatedNodes
 
 -- | Run a single simulation tick. Returns new alpha value.
 tick :: forall r. WASMSim r -> Effect Number
 tick sim = do
   alpha <- FFI.tick sim.wasmSim
 
-  -- Sync positions back to PureScript
+  -- Sync positions and velocities back to PureScript
   nodes <- Ref.read sim.nodesRef
-  updatedNodes <- FFI.syncPositionsFromWasm sim.wasmSim nodes
+  updatedNodes <- FFI.syncNodesFromWasm sim.wasmSim nodes
   Ref.write updatedNodes sim.nodesRef
 
   pure alpha
@@ -387,9 +669,9 @@ tickN :: forall r. Int -> WASMSim r -> Effect Number
 tickN n sim = do
   alpha <- FFI.tickN sim.wasmSim n
 
-  -- Sync final positions back
+  -- Sync final positions and velocities back
   nodes <- Ref.read sim.nodesRef
-  updatedNodes <- FFI.syncPositionsFromWasm sim.wasmSim nodes
+  updatedNodes <- FFI.syncNodesFromWasm sim.wasmSim nodes
   Ref.write updatedNodes sim.nodesRef
 
   pure alpha
@@ -398,7 +680,7 @@ tickN n sim = do
 getNodes :: forall r. WASMSim r -> Effect (Array (SimulationNode r))
 getNodes sim = do
   nodes <- Ref.read sim.nodesRef
-  FFI.syncPositionsFromWasm sim.wasmSim nodes
+  FFI.syncNodesFromWasm sim.wasmSim nodes
 
 -- | Get current alpha value
 getAlpha :: forall r. WASMSim r -> Effect Number

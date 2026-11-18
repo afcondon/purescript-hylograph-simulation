@@ -213,7 +213,7 @@ mySetup = Setup.setup "physics" forces
   # Setup.withAlphaDecay 0.02    -- Faster cooling
   # Setup.withAlphaMin 0.001
   # Setup.withAlphaTarget 0.0
-  # Setup.withVelocityDecay 0.4
+  # Setup.withVelocityRetention 0.4
 ----
 
 == Common Patterns

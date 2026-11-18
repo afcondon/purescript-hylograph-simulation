@@ -1,0 +1,17 @@
+{
+  "name": "purescript-hylograph-simulation",
+  "version": "0.6.0",
+  "description": "Force simulation for Hylograph: the library's own simulation loop over d3-force's force functions (or a Rust/WASM kernel).",
+  "private": true,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/afcondon/purescript-hylograph-simulation.git"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "d3-drag": "^3.0.0",
+    "d3-force": "^3.0.0",
+    "d3-selection": "^3.0.0"
+  }
+}
