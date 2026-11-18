@@ -128,6 +128,8 @@ module Hylograph.ForceEngine.WASM
   , syncPositionsToWasm
   , syncPositionsFromWasm
   , syncNodesToWasm
+  , syncPinsToWasm
+  , withPinsFromSnapshot
   , syncNodesFromWasm
   ) where
 
@@ -139,6 +141,7 @@ import Data.Nullable (Nullable)
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Aff.Compat (EffectFnAff, fromEffectFnAff)
+import Data.Function.Uncurried (Fn2, runFn2)
 import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn3, EffectFn4, EffectFn5, EffectFn6, EffectFn7, runEffectFn1, runEffectFn2, runEffectFn3, runEffectFn4, runEffectFn5, runEffectFn6, runEffectFn7)
 
 
@@ -291,6 +294,8 @@ foreign import setAlphaMin_ :: EffectFn2 WASMSimulation Number Unit
 foreign import setAlphaTarget_ :: EffectFn2 WASMSimulation Number Unit
 foreign import resetRandom_ :: EffectFn1 WASMSimulation Unit
 foreign import syncNodesToWasm_ :: forall r. EffectFn2 WASMSimulation (Array { x :: Number, y :: Number, vx :: Number, vy :: Number, fx :: Nullable Number, fy :: Nullable Number | r }) Unit
+foreign import syncPinsToWasm_ :: forall r. EffectFn2 WASMSimulation (Array { fx :: Nullable Number, fy :: Nullable Number | r }) Unit
+foreign import withPinsFromSnapshot_ :: forall r. Fn2 Snapshot (Array { fx :: Nullable Number, fy :: Nullable Number | r }) (Array { fx :: Nullable Number, fy :: Nullable Number | r })
 foreign import syncNodesFromWasm_ :: forall r. EffectFn2 WASMSimulation (Array { x :: Number, y :: Number, vx :: Number, vy :: Number | r }) (Array { x :: Number, y :: Number, vx :: Number, vy :: Number | r })
 
 
@@ -737,6 +742,23 @@ syncNodesToWasm
   -> Array { x :: Number, y :: Number, vx :: Number, vy :: Number, fx :: Nullable Number, fy :: Nullable Number | r }
   -> Effect Unit
 syncNodesToWasm = runEffectFn2 syncNodesToWasm_
+
+-- | Copy the pins alone (fx/fy, null = free) from PureScript nodes to WASM.
+syncPinsToWasm
+  :: forall r
+   . WASMSimulation
+  -> Array { fx :: Nullable Number, fy :: Nullable Number | r }
+  -> Effect Unit
+syncPinsToWasm = runEffectFn2 syncPinsToWasm_
+
+-- | The nodes with the pins a snapshot recorded, as new records. The
+-- | snapshot must be of as many nodes.
+withPinsFromSnapshot
+  :: forall r
+   . Snapshot
+  -> Array { fx :: Nullable Number, fy :: Nullable Number | r }
+  -> Array { fx :: Nullable Number, fy :: Nullable Number | r }
+withPinsFromSnapshot = runFn2 withPinsFromSnapshot_
 
 -- | Copy position and velocity from WASM back to PureScript nodes.
 -- | Warning: This mutates the input array!

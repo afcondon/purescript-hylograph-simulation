@@ -108,6 +108,7 @@ module Hylograph.ForceEngine.Setup
   , linkValues
   , linkStrengths
   , recipe
+  , linkProblem
 
     -- * Setup Type
   , Setup
@@ -869,8 +870,13 @@ withVelocityDecay = withVelocityRetention
 -- | read. Each tick applies the forces in order of their names.
 -- |
 -- | Throws, before changing anything, if a link names a node that is not
--- | among the nodes (`node not found: <id>`, as d3-force says it).
--- | `tryApplySetup` returns that as a value instead.
+-- | among the nodes and the setup has a force along the links (`node not
+-- | found: <id>`, as d3-force says it). `tryApplySetup` returns that as a
+-- | value instead.
+-- |
+-- | The setup's params (alpha, alphaMin, alphaDecay, alphaTarget,
+-- | velocityRetention) become the simulation's, replacing what it was
+-- | created with.
 -- |
 -- | Example:
 -- | ```purescript
@@ -913,9 +919,16 @@ tryApplySetup setupConfig sim = do
       -- A later force replaces an earlier one of the same name; forces in
       -- the simulation that the setup does not name are dropped.
       Ref.write (Map.fromFoldable handles) sim.forces
-      -- Note: the other params (alphaDecay, etc.) are in sim.config, which
-      -- is fixed when the simulation is created.
+      -- The setup's params are the simulation's from here on, as they are
+      -- on the WASM engine.
       Ref.write setupConfig.params.alpha sim.alpha
+      Ref.write
+        { alphaMin: setupConfig.params.alphaMin
+        , alphaDecay: setupConfig.params.alphaDecay
+        , alphaTarget: setupConfig.params.alphaTarget
+        , velocityRetention: setupConfig.params.velocityRetention
+        }
+        sim.settings
       pure (Right unit)
 
 -- | What a force of a setup is to the default engine: how to make it once
@@ -1051,6 +1064,29 @@ regionOf = case _ of
   RectRegion r -> PureContain.rectangle r.x0 r.y0 r.x1 r.y1
   CircleRegion c -> PureContain.circle c.x c.y c.radius
   PolygonRegion vertices -> PureContain.polygon vertices
+
+-- | What is wrong with the links, for this setup: `node not found: <id>`
+-- | for the first link end that is no node's id, if the setup has a force
+-- | that acts along the links (Link, Directional). `Nothing` if every end is
+-- | there, or if no force would look. This is the one condition under which
+-- | `applySetup` fails, on either engine.
+linkProblem
+  :: forall row
+   . Setup (SimulationNode row)
+  -> Array (SimulationNode row)
+  -> Core.Links
+  -> Maybe String
+linkProblem setupConfig nodes links =
+  if Array.any alongLinks setupConfig.forces then
+    case withEnds nodes links of
+      Left problem -> Just problem
+      Right _ -> Nothing
+  else Nothing
+  where
+  alongLinks = case _ of
+    LinkForce _ -> true
+    DirectionalForce _ -> true
+    _ -> false
 
 -- | Each link with the nodes at its ends, or the first end that is no
 -- | node's id.

@@ -95,14 +95,23 @@ Three things changed with the kernel:
   node starts on its pin (d3's `initializeNodes`). The old engine put an
   unpositioned node somewhere at random.
 - **A link naming a node that is not there is an error** (`node not found:
-  <id>`, d3's words): `applySetup` throws and `tryApplySetup` returns it as a
-  `Left`. On the WASM engine such a link is still dropped with a warning.
+  <id>`, d3's words) when the setup has a force along the links:
+  `applySetup` throws and `tryApplySetup` returns it as a `Left`, on both
+  engines.
 
 A second kernel, written in Rust and compiled to WebAssembly, sits behind the
 same `Engine` switch (`engine: WASM`, after `initWASM` has loaded the module;
 bindings in `Hylograph.ForceEngine.WASM`). One `Setup` drives both, every
 force included, and `test/engine-parity.mjs` holds them to each other (to
 float width one tick from identical state: the shipped kernel is f32).
+
+The handle's calls do the same on both too (`test/browser-check.mjs` drives
+each engine in headless Chrome): a drag after the simulation has completed,
+`pinNodes`, `unpinNodes`, `interpolatePositions`. And a `Setup`'s params
+(alpha, alphaDecay, alphaTarget, velocityRetention) are the simulation's on
+both, whatever it was created with. What still differs: the default engine
+moves the same node objects every tick, and the WASM engine hands out fresh
+records after each tick (a pin set on the latest ones is honoured).
 
 `engine: D3` still compiles and now means `Pure`.
 

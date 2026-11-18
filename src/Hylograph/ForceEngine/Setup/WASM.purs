@@ -22,8 +22,10 @@
 -- | engine in f64, so the two agree to float width over one tick and drift
 -- | apart after that, as any two roundings of a force layout do.
 -- |
--- | One difference remains: a link naming a node that is not there is left
--- | out here, with a warning; the default engine makes it an error.
+-- | The nodes a caller is handed (`getNodes`, `step`) are fresh records
+-- | after every tick, not the same objects moved, which is the one way this
+-- | engine differs from the default one. A pin set on the latest ones
+-- | (`node.fx`, as a drag does) is read before the next tick.
 -- |
 -- | Example:
 -- | ```purescript
@@ -57,6 +59,7 @@ module Hylograph.ForceEngine.Setup.WASM
 
     -- * Apply Setup (the key functions - functional parity with D3)
   , applySetup
+  , tryApplySetup
   , applySetupWithData
 
     -- * Morphing, snapshots, convergence
@@ -78,6 +81,9 @@ module Hylograph.ForceEngine.Setup.WASM
   , getAlpha
   , reheat
   , isRunning
+  , pinNodes
+  , unpinNodes
+  , interpolatePositions
 
     -- * Re-exports from Setup (for convenience)
   , module Exports
@@ -95,14 +101,15 @@ import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff)
-import Effect.Console (warn)
+import Effect.Exception (throw)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
 
 import Hylograph.ForceEngine.Core as Core
 import Hylograph.ForceEngine.WASM as FFI
 import Hylograph.ForceEngine.Simulation (SimulationNode) as Exports
-import Hylograph.ForceEngine.Simulation (SimulationNode)
+import Hylograph.ForceEngine.Simulation (PositionMap, SimulationNode, interpolatePositionsInPlace_, pinNodesInPlace_, unpinNodesInPlace_)
+import Data.Either (Either(..))
 import Hylograph.ForceEngine.Setup
   ( Setup
   , SetupParams
@@ -131,6 +138,7 @@ import Hylograph.ForceEngine.Setup
   , computeNodeGUP
   , computeLinkGUP
   , forceName
+  , linkProblem
   , linkStrengths
   , linkValues
   , resolveLinks
@@ -227,6 +235,33 @@ applySetup
   -> WASMSim r
   -> Effect Unit
 applySetup setupConfig sim = do
+  outcome <- tryApplySetup setupConfig sim
+  case outcome of
+    Left problem -> throw ("Hylograph.ForceEngine.Setup: " <> problem <> ". Nothing was applied.")
+    Right _ -> pure unit
+
+-- | `applySetup`, with the one thing that can go wrong as a value, as the
+-- | default engine's `tryApplySetup` has it: `Left "node not found: <id>"`
+-- | where the setup has a force along the links and a link names a node
+-- | that is not among the nodes. The simulation is then left as it was.
+tryApplySetup
+  :: forall r
+   . Setup (SimulationNode r)
+  -> WASMSim r
+  -> Effect (Either String Unit)
+tryApplySetup setupConfig sim = do
+  nodes <- Ref.read sim.nodesRef
+  links <- Ref.read sim.linksRef
+  case linkProblem setupConfig nodes links of
+    Just problem -> pure (Left problem)
+    Nothing -> Right <$> applyChecked setupConfig sim
+
+applyChecked
+  :: forall r
+   . Setup (SimulationNode r)
+  -> WASMSim r
+  -> Effect Unit
+applyChecked setupConfig sim = do
   nodes <- Ref.read sim.nodesRef
   links <- Ref.read sim.linksRef
   let ends = resolveLinks nodes links
@@ -429,8 +464,9 @@ flatTargets target = Array.concatMap \node -> case target node of
 
 -- | Hand the links to the kernel. Links name their endpoints by node `id`,
 -- | as they do for the default engine; the kernel wants positions in the
--- | node array. A link naming a node that is not there is left out, with a
--- | warning (the default engine, like d3-force, makes it an error).
+-- | node array. A link naming a node that is not there cannot be given to
+-- | the kernel and is left out here; `applySetup` is where that becomes an
+-- | error, if the setup has a force that would have used it.
 setLinks
   :: forall r
    . FFI.WASMSimulation
@@ -445,9 +481,6 @@ setLinks wasmSim nodes links = do
       target <- Map.lookup link.target indexOfId
       in [ source, target ]
     resolved = Array.mapMaybe endpoints links
-    missing = Array.length links - Array.length resolved
-  when (missing > 0) do
-    warn $ "WASM Setup: " <> show missing <> " link(s) name a node id that is not in the simulation; left out"
   FFI.setLinks wasmSim (Array.concat resolved)
 
 -- =============================================================================
@@ -591,7 +624,11 @@ reradius name radius sim = do
 -- | velocities, pins, alpha and the other parameters, and the state of the
 -- | stream that separates coincident nodes.
 snapshot :: forall r. WASMSim r -> Effect FFI.Snapshot
-snapshot sim = FFI.snapshot sim.wasmSim
+snapshot sim = do
+  -- A pin set on the nodes since the last tick belongs in the record.
+  nodes <- Ref.read sim.nodesRef
+  FFI.syncPinsToWasm sim.wasmSim nodes
+  FFI.snapshot sim.wasmSim
 
 -- | Put the simulation back in a recorded state: with the same setup and
 -- | links, the ticks that follow are exactly the ticks that followed the
@@ -605,7 +642,8 @@ restore recorded sim = do
   count <- FFI.nodeCount sim.wasmSim
   if ok && count == Array.length nodes then do
     updated <- FFI.syncNodesFromWasm sim.wasmSim nodes
-    Ref.write updated sim.nodesRef
+    -- The pins come back too: the nodes are where the next tick reads them.
+    Ref.write (FFI.withPinsFromSnapshot recorded updated) sim.nodesRef
     pure true
   else do
     void $ FFI.restore sim.wasmSim before
@@ -656,8 +694,9 @@ settled tolerance sim = FFI.settled sim.wasmSim tolerance.step tolerance.acceler
 -- | positions out of the kernel twice.)
 step :: forall r. WASMSim r -> Effect (Array (SimulationNode r))
 step sim = do
-  _ <- FFI.tick sim.wasmSim
   nodes <- Ref.read sim.nodesRef
+  FFI.syncPinsToWasm sim.wasmSim nodes
+  _ <- FFI.tick sim.wasmSim
   updatedNodes <- FFI.syncNodesFromWasm sim.wasmSim nodes
   Ref.write updatedNodes sim.nodesRef
   pure updatedNodes
@@ -665,10 +704,13 @@ step sim = do
 -- | Run a single simulation tick. Returns new alpha value.
 tick :: forall r. WASMSim r -> Effect Number
 tick sim = do
+  -- A pin set or cleared on the nodes since the last tick (a drag does
+  -- both) has to reach the kernel first.
+  nodes <- Ref.read sim.nodesRef
+  FFI.syncPinsToWasm sim.wasmSim nodes
   alpha <- FFI.tick sim.wasmSim
 
   -- Sync positions and velocities back to PureScript
-  nodes <- Ref.read sim.nodesRef
   updatedNodes <- FFI.syncNodesFromWasm sim.wasmSim nodes
   Ref.write updatedNodes sim.nodesRef
 
@@ -677,20 +719,21 @@ tick sim = do
 -- | Run multiple ticks. Returns final alpha.
 tickN :: forall r. Int -> WASMSim r -> Effect Number
 tickN n sim = do
+  nodes <- Ref.read sim.nodesRef
+  FFI.syncPinsToWasm sim.wasmSim nodes
   alpha <- FFI.tickN sim.wasmSim n
 
   -- Sync final positions and velocities back
-  nodes <- Ref.read sim.nodesRef
   updatedNodes <- FFI.syncNodesFromWasm sim.wasmSim nodes
   Ref.write updatedNodes sim.nodesRef
 
   pure alpha
 
--- | Get current nodes with positions
+-- | The nodes as the last tick (or the last change made through this
+-- | module) left them. The same records until the next tick, so a pin set
+-- | on one of them is seen by that tick.
 getNodes :: forall r. WASMSim r -> Effect (Array (SimulationNode r))
-getNodes sim = do
-  nodes <- Ref.read sim.nodesRef
-  FFI.syncNodesFromWasm sim.wasmSim nodes
+getNodes sim = Ref.read sim.nodesRef
 
 -- | Get current alpha value
 getAlpha :: forall r. WASMSim r -> Effect Number
@@ -703,3 +746,31 @@ reheat sim = FFI.reheat sim.wasmSim
 -- | Check if simulation is still running
 isRunning :: forall r. WASMSim r -> Effect Boolean
 isRunning sim = FFI.isRunning sim.wasmSim
+
+-- =============================================================================
+-- Pins and positions, as the default engine has them
+-- =============================================================================
+
+-- | Pin every node where it is (fx = x, fy = y), on the nodes and in the
+-- | kernel.
+pinNodes :: forall r. WASMSim r -> Effect Unit
+pinNodes sim = do
+  pinNodesInPlace_ sim.nodesRef
+  nodes <- Ref.read sim.nodesRef
+  FFI.syncPinsToWasm sim.wasmSim nodes
+
+-- | Unpin every node, on the nodes and in the kernel.
+unpinNodes :: forall r. WASMSim r -> Effect Unit
+unpinNodes sim = do
+  unpinNodesInPlace_ sim.nodesRef
+  nodes <- Ref.read sim.nodesRef
+  FFI.syncPinsToWasm sim.wasmSim nodes
+
+-- | Put every node that both maps name at `start + (target - start) *
+-- | progress`, on the nodes and in the kernel, so that the next tick goes
+-- | on from there. Velocities and pins are left as they are.
+interpolatePositions :: forall r. PositionMap -> PositionMap -> Number -> WASMSim r -> Effect Unit
+interpolatePositions start target progress sim = do
+  interpolatePositionsInPlace_ start target progress sim.nodesRef
+  nodes <- Ref.read sim.nodesRef
+  FFI.syncNodesToWasm sim.wasmSim nodes

@@ -20,7 +20,10 @@
 //   4. per-link distance and strength, degree strength, filtered x / y;
 //   5. the forces d3-force does not have, each alone and all together;
 //   6. what only the default engine promises: the same layout on every run,
-//      to the bit, and a link to a missing node as an error with d3's words.
+//      to the bit;
+//   7. what both have to hear: a link to a missing node (an error, in d3's
+//      words, on both), the setup's params whatever the simulation was
+//      created with, a pin set on a node between ticks, pins in a snapshot.
 //
 // The shipped WASM kernel is f32 and the default engine is f64, so the two
 // agree to float width (1e-6 of the layout's extent) one tick from identical
@@ -275,18 +278,80 @@ console.log('\n6. The default engine alone');
   check(first.every((values, i) => values.every((value, k) => Object.is(value, second[i][k]))) && first.every((values) => values.every(Number.isFinite)),
     'the same layout twice, to the bit: 300 nodes starting on one spot, 100 ticks, every force');
 }
+// ---------------------------------------------------------------------------
+// 7. Things a Setup or a node says that both engines have to hear
+// ---------------------------------------------------------------------------
+console.log('\n7. What both engines have to hear');
 {
+  // A link to a node that is not there: an error on both, in the same words,
+  // when the setup has a force along the links; no error when it has none.
   const dangling = [...makeLinks(all), { source: idOf(3), target: 999999 }];
-  const setup = Setup.setupWithParams('dangling')([build(manyBody('charge')), build(link('links'))])(params);
-  const sim = PureSim.create({ alphaMin: 0.001, alphaDecay: 0.02, alphaTarget: 0, velocityRetention: 0.6 })();
+  const withLinks = Setup.setupWithParams('dangling')([build(manyBody('charge')), build(link('links'))])(params);
+  const without = Setup.setupWithParams('no link force')([build(manyBody('charge'))])(params);
+  const pure = () => { const sim = PureSim.create({ alphaMin: 0.001, alphaDecay: 0.02, alphaTarget: 0, velocityRetention: 0.6 })(); PureSim.setNodes(makeNodes())(sim)(); PureSim.setLinks(dangling)(sim)(); return { tryApply: (setup) => Setup.tryApplySetup(setup)(sim)(), apply: (setup) => Setup.applySetup(setup)(sim)() }; };
+  const wasm = () => { const sim = WasmSetup.create(makeNodes())(dangling)(); return { tryApply: (setup) => WasmSetup.tryApplySetup(setup)(sim)(), apply: (setup) => WasmSetup.applySetup(setup)(sim)() }; };
+  const outcome = (engine) => {
+    const asValue = Either.either((problem) => problem)(() => 'applied')(engine().tryApply(withLinks));
+    let thrown = 'no error';
+    try { engine().apply(withLinks); } catch (error) { thrown = error.message; }
+    const harmless = Either.either((problem) => problem)(() => 'applied')(engine().tryApply(without));
+    return [asValue, thrown, harmless];
+  };
+  const fromPure = outcome(pure), fromWasm = outcome(wasm);
+  check(fromPure[0] === 'node not found: 999999' && fromPure[1].includes('node not found: 999999') && fromPure[2] === 'applied',
+    `default engine: a link to a missing node is Left "${fromPure[0]}", applySetup throws, and a setup with no force along the links applies`);
+  check(fromPure.every((value, i) => value === fromWasm[i]), `WASM engine: the same three outcomes, word for word ("${fromWasm[1]}")`);
+}
+{
+  // The setup's params are the simulation's, whatever it was created with.
+  const brisk = Setup.setupWithParams('brisk')([build(manyBody('charge'), Setup.withStrength(fixed(-20))), build(positionX('x')), build(positionY('y'))])({ alpha: 0.7, alphaMin: 0.001, alphaDecay: 0.05, alphaTarget: 0.3, velocityRetention: 0.9 });
+  const sim = PureSim.create({ alphaMin: 0.001, alphaDecay: 0.5, alphaTarget: 0, velocityRetention: 0.1 })(); // none of this should survive the setup
   PureSim.setNodes(makeNodes())(sim)();
-  PureSim.setLinks(dangling)(sim)();
-  const asValue = Either.either((problem) => problem)(() => 'no error')(Setup.tryApplySetup(setup)(sim)());
-  let thrown = null;
-  try { Setup.applySetup(setup)(sim)(); } catch (error) { thrown = error.message; }
-  check(asValue === 'node not found: 999999', `tryApplySetup: a link to a missing node is Left "${asValue}"`);
-  check(thrown !== null && thrown.includes('node not found: 999999') && sim.forces.value.size === undefined && Object.keys(sim.forces.value).length <= 1,
-    `applySetup throws and applies nothing: ${thrown === null ? 'NO ERROR' : thrown}`);
+  Setup.applySetup(brisk)(sim)();
+  const wasm = WasmSetup.create(makeNodes())([])();
+  WasmSetup.applySetup(brisk)(wasm)();
+  let alphas = [];
+  for (let tick = 1; tick <= 3; tick++) {
+    alphas = [PureSim.tick(sim)(), WasmSetup.tick(wasm)()];
+    const pure = new Map(sim.nodes.value.map((d) => [d.id, [d.x, d.y]])), kernel = new Map(WasmSetup.getNodes(wasm)().map((d) => [d.id, [d.x, d.y]]));
+    report('params from the setup, not from create', tick, compare(pure, kernel), tick <= 2);
+  }
+  check(Math.abs(alphas[0] - alphas[1]) < 1e-6 && Math.abs(alphas[0] - 0.64295) < 1e-5, `alpha, alphaDecay and alphaTarget are the setup's on both: after three ticks alpha is ${alphas[0].toFixed(6)} and ${alphas[1].toFixed(6)}`);
+}
+{
+  // A pin set on a node between ticks (what a drag does), and cleared again.
+  const setup = Setup.setupWithParams('pinned')([build(manyBody('charge'))])(params);
+  const engines = { 'default engine': pureEngine(setup, makeNodes(), []), 'WASM engine': wasmEngine(setup, makeNodes(), []) };
+  for (const [name, engine] of Object.entries(engines)) {
+    engine.tick(); engine.tick();
+    const before = { ...engine.nodes()[20] };
+    engine.nodes()[20].fx = before.x + 25; engine.nodes()[20].fy = before.y - 40;
+    engine.tick();
+    const held = { ...engine.nodes()[20] };
+    engine.tick();
+    engine.nodes()[20].fx = null; engine.nodes()[20].fy = null;
+    engine.tick();
+    const freed = engine.nodes()[20];
+    check(Math.abs(held.x - (before.x + 25)) < 1e-4 && Math.abs(held.y - (before.y - 40)) < 1e-4 && held.vx === 0 && (Math.abs(freed.x - held.x) > 1e-3 || Math.abs(freed.y - held.y) > 1e-3),
+      `${name}: a pin set on a node between ticks holds it there, and clearing it lets it go`);
+  }
+}
+{
+  // Snapshot and restore on the WASM engine carry the pins with them.
+  const setup = Setup.setupWithParams('snap')([build(manyBody('charge'))])(params);
+  const sim = WasmSetup.create(makeNodes())([])();
+  WasmSetup.applySetup(setup)(sim)();
+  WasmSetup.tick(sim)();
+  const node = WasmSetup.getNodes(sim)()[30];
+  node.fx = node.x + 10; node.fy = node.y + 10;
+  const pin = [node.fx, node.fy];
+  const recorded = WasmSetup.snapshot(sim)();
+  WasmSetup.getNodes(sim)()[30].fx = null; WasmSetup.getNodes(sim)()[30].fy = null;
+  WasmSetup.tick(sim)(); WasmSetup.tick(sim)();
+  const restored = WasmSetup.restore(recorded)(sim)();
+  WasmSetup.tick(sim)(); WasmSetup.tick(sim)();
+  const after = WasmSetup.getNodes(sim)()[30];
+  check(restored && Math.abs(after.x - pin[0]) < 1e-4 && Math.abs(after.y - pin[1]) < 1e-4 && after.fx != null, 'WASM engine: a pin set on a node is in the snapshot, and comes back with it');
 }
 
 if (failures.length) {

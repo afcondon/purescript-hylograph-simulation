@@ -261,8 +261,14 @@ runPureSimulation config = do
         }
   sim <- ForceSim.create simConfig
 
+  let
+    -- The setup's params are the simulation's (as on the WASM engine),
+    -- except that this call's own `alphaMin` decides when it has converged.
+    keepAlphaMin = Ref.modify_ (_ { alphaMin = config.alphaMin }) sim.settings
+
   -- Apply initial setup with data
   _ <- ForceSetup.applySetupWithData config.setup config.nodes config.links sim
+  keepAlphaMin
 
   -- Store current setup for updates
   setupRef <- Ref.new config.setup
@@ -324,11 +330,13 @@ runPureSimulation config = do
         { updateData: \nodes links -> do
             currentSetup <- Ref.read setupRef
             result <- ForceSetup.applySetupWithData currentSetup nodes links sim
+            keepAlphaMin
             rekindle
             pure result
         , updateSetup: \newSetup -> do
             Ref.write newSetup setupRef
             ForceSetup.applySetup newSetup sim
+            keepAlphaMin
             rekindle
         , getNodes: ForceSim.getNodes sim
         , getAlpha: Ref.read alphaRef
@@ -415,6 +423,30 @@ runWASMSimulation config = do
   -- Start coordinator
   Coord.start coord
 
+  let
+    -- As on the default engine: heat the simulation up again and make sure
+    -- something is ticking it. If it had run to completion the coordinator
+    -- has stopped, so a new one is started; without that a reheat (a drag,
+    -- say) would change nothing anyone could see.
+    rekindle = do
+      WASMSetup.reheat sim
+      Ref.write 1.0 alphaRef
+      Emitter.emit emitterHandle Started
+      running <- Ref.read runningRef
+      unless running do
+        Ref.write true runningRef
+        oldCoord <- Ref.read coordRef
+        Coord.stop oldCoord
+        c <- Coord.create
+        Ref.write c coordRef
+        _ <- Coord.register c
+          { tick: wasmConsumer sim emitterHandle alphaRef config.alphaMin
+          , onComplete: do
+              Ref.write false runningRef
+              Emitter.emit emitterHandle Completed
+          }
+        Coord.start c
+
   -- Return handle and emitter
   pure
     { events: emitter
@@ -422,92 +454,29 @@ runWASMSimulation config = do
         { updateData: \nodes links -> do
             currentSetup <- Ref.read setupRef
             result <- WASMSetup.applySetupWithData currentSetup nodes links sim
-            WASMSetup.reheat sim
-            Ref.write 1.0 alphaRef
-            Emitter.emit emitterHandle Started
-            -- Restart coordinator if simulation has completed
-            running <- Ref.read runningRef
-            unless running do
-              Ref.write true runningRef
-              -- Stop old coordinator and create new one
-              oldCoord <- Ref.read coordRef
-              Coord.stop oldCoord
-              c <- Coord.create
-              Ref.write c coordRef
-              _ <- Coord.register c
-                { tick: wasmConsumer sim emitterHandle alphaRef config.alphaMin
-                , onComplete: do
-                    Ref.write false runningRef
-                    Emitter.emit emitterHandle Completed
-                }
-              Coord.start c
+            rekindle
             pure result
-
         , updateSetup: \newSetup -> do
             Ref.write newSetup setupRef
             WASMSetup.applySetup newSetup sim
-            WASMSetup.reheat sim
-            Ref.write 1.0 alphaRef
-            Emitter.emit emitterHandle Started
-            -- Restart coordinator if simulation has completed
-            running <- Ref.read runningRef
-            unless running do
-              Ref.write true runningRef
-              -- Stop old coordinator and create new one
-              oldCoord <- Ref.read coordRef
-              Coord.stop oldCoord
-              c <- Coord.create
-              Ref.write c coordRef
-              _ <- Coord.register c
-                { tick: wasmConsumer sim emitterHandle alphaRef config.alphaMin
-                , onComplete: do
-                    Ref.write false runningRef
-                    Emitter.emit emitterHandle Completed
-                }
-              Coord.start c
-
+            rekindle
         , getNodes: WASMSetup.getNodes sim
-
         , getAlpha: Ref.read alphaRef
-
         , stop: do
             running <- Ref.read runningRef
             when running do
               Ref.write false runningRef
-              Emitter.emit emitterHandle Stopped
-
-        , start: do
-            running <- Ref.read runningRef
-            unless running do
-              WASMSetup.reheat sim
-              Ref.write 1.0 alphaRef
-              Ref.write true runningRef
-              Emitter.emit emitterHandle Started
-              -- Stop old coordinator before creating new one (prevents CPU spike from multiple RAF loops)
               oldCoord <- Ref.read coordRef
               Coord.stop oldCoord
-              c <- Coord.create
-              Ref.write c coordRef
-              _ <- Coord.register c
-                { tick: wasmConsumer sim emitterHandle alphaRef config.alphaMin
-                , onComplete: do
-                    Ref.write false runningRef
-                    Emitter.emit emitterHandle Completed
-                }
-              Coord.start c
-
-        , reheat: do
-            WASMSetup.reheat sim
-            Ref.write 1.0 alphaRef
-            Emitter.emit emitterHandle Started
-
-        -- Position interpolation not yet implemented for WASM engine.
-        -- ForcePlayground uses the default engine, so this is low priority.
-        , interpolatePositions: \_ _ _ -> pure unit
-
-        , pinNodes: pure unit
-
-        , unpinNodes: pure unit
+              Emitter.emit emitterHandle Stopped
+        , start: do
+            running <- Ref.read runningRef
+            unless running rekindle
+        , reheat: rekindle
+        , interpolatePositions: \startPos targetPos progress ->
+            WASMSetup.interpolatePositions startPos targetPos progress sim
+        , pinNodes: WASMSetup.pinNodes sim
+        , unpinNodes: WASMSetup.unpinNodes sim
         }
     }
 

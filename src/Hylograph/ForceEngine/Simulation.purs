@@ -66,6 +66,10 @@ module Hylograph.ForceEngine.Simulation
   , pinNodesInPlace
   , unpinNodesInPlace
   , pinNodesAtPositions
+    -- * The same, on any node array in a Ref (for engine implementations)
+  , interpolatePositionsInPlace_
+  , pinNodesInPlace_
+  , unpinNodesInPlace_
     -- * Grid Position Updates (for ForceXGrid/ForceYGrid)
   , updateGridPositionsInPlace
   , updateGridXWithFn
@@ -153,7 +157,8 @@ type Simulation row linkRow =
   , random :: Core.RandomSource  -- separates coincident nodes; seeded, one per simulation
   , alpha :: Ref Number
   , prevAlpha :: Ref Number  -- For alpha threshold detection
-  , config :: SimConfig
+  , config :: SimConfig  -- as the simulation was created
+  , settings :: Ref SimConfig  -- as it runs now: `applySetup` replaces these with the setup's params
   , running :: Ref Boolean
   , cancelAnimation :: Ref (Effect Unit)
   , tickCallback :: Ref (Effect Unit)  -- Legacy single callback
@@ -195,6 +200,7 @@ create config = do
   cancelRef <- Ref.new (pure unit)
   tickRef <- Ref.new (pure unit)
   random <- Core.randomSource
+  settings <- Ref.new config
   pure
     { nodes: nodesRef
     , links: linksRef
@@ -203,6 +209,7 @@ create config = do
     , alpha: alphaRef
     , prevAlpha: prevAlphaRef
     , config
+    , settings
     , running: runningRef
     , cancelAnimation: cancelRef
     , tickCallback: tickRef
@@ -232,6 +239,7 @@ createWithCallbacks config cbs = do
   cancelRef <- Ref.new (pure unit)
   tickRef <- Ref.new (pure unit)
   random <- Core.randomSource
+  settings <- Ref.new config
   pure
     { nodes: nodesRef
     , links: linksRef
@@ -240,6 +248,7 @@ createWithCallbacks config cbs = do
     , alpha: alphaRef
     , prevAlpha: prevAlphaRef
     , config
+    , settings
     , running: runningRef
     , cancelAnimation: cancelRef
     , tickCallback: tickRef
@@ -408,19 +417,20 @@ tick sim = do
   forces <- Ref.read sim.forces
   alpha <- Ref.read sim.alpha
   prevAlpha <- Ref.read sim.prevAlpha
+  settings <- Ref.read sim.settings
 
   -- Apply all forces, in order of their names
   let forceHandles = Array.fromFoldable $ Map.values forces
   Core.applyForces forceHandles alpha
 
   -- Integrate positions
-  Core.integratePositions nodes sim.config.velocityRetention
+  Core.integratePositions nodes settings.velocityRetention
 
   -- Hard containment, then pins again
   Core.constrain forceHandles nodes
 
   -- Decay alpha
-  let newAlpha = Core.decayAlpha alpha sim.config.alphaMin sim.config.alphaDecay sim.config.alphaTarget
+  let newAlpha = Core.decayAlpha alpha settings.alphaMin settings.alphaDecay settings.alphaTarget
   Ref.write newAlpha sim.alpha
   Ref.write alpha sim.prevAlpha  -- Store current as previous for next tick
 

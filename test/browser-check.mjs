@@ -18,6 +18,12 @@
 // B. A page made here from the compiled library, for the three drags the
 //    library itself provides (the demo's own drag comes from
 //    hylograph-selection): attachDrag, attachPinningDrag, attachGroupDrag.
+//
+// C. The high-level handle (`Hylograph.Simulation.runSimulation`) on each
+//    engine in turn, default and WASM, in a page made here: after the
+//    simulation has run to completion, dragging a node still moves the
+//    picture; `pinNodes`, `unpinNodes` and `interpolatePositions` do on one
+//    engine what they do on the other.
 import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -56,13 +62,44 @@ writeFileSync(join(scratch, 'entry.js'), `
   window.nodes = nodes; window.sim = sim; window.running = () => Sim.isRunning(sim)();
 `);
 execFileSync('esbuild', [join(scratch, 'entry.js'), '--bundle', '--format=iife', `--outfile=${join(scratch, 'drag.js')}`, '--log-level=warning']);
+// C's page: six nodes, a `towards` force to a row of slots, the handle on
+// window. `?engine=wasm` picks the kernel.
+writeFileSync(join(scratch, 'handle-entry.js'), `
+  import * as Simulation from ${JSON.stringify(join(here, '../output/Hylograph.Simulation/index.js'))};
+  import * as Setup from ${JSON.stringify(join(here, '../output/Hylograph.ForceEngine.Setup/index.js'))};
+  import * as Emitter from ${JSON.stringify(join(here, '../output/Hylograph.Simulation.Emitter/index.js'))};
+  import * as Pointer from ${JSON.stringify(join(here, '../output/Hylograph.Interaction.Pointer/index.js'))};
+  import * as Maybe from ${JSON.stringify(join(here, '../output/Data.Maybe/index.js'))};
+  import { initWasm_ } from ${JSON.stringify(join(here, '../output/Hylograph.ForceEngine.WASM/foreign.js'))};
+  const wasm = new URLSearchParams(location.search).get('engine') === 'wasm';
+  const svg = document.querySelector('svg');
+  const slot = (d) => Maybe.Just.create({ x: 100 + d.id * 80, y: 200 });
+  const nodes = [0, 1, 2, 3, 4, 5].map((id) => ({ id, x: 120 + id * 70, y: 120 + (id % 2) * 60, vx: 0, vy: 0, fx: null, fy: null }));
+  const setup = Setup.setupWithParams('row')([Setup.withStrength(Setup.static(0.3))(Setup.towards('home')(slot))])({ alpha: 1, alphaMin: 0.001, alphaDecay: 0.08, alphaTarget: 0, velocityRetention: 0.6 });
+  const start = () => {
+    const { handle, events } = Simulation.runSimulation({ engine: wasm ? Simulation.WASM.value : Simulation.Pure.value, setup, nodes, links: [], container: 'svg', alphaMin: 0.001 })();
+    const circles = nodes.map(() => { const el = document.createElementNS('http://www.w3.org/2000/svg', 'circle'); el.setAttribute('r', 14); svg.appendChild(el); return el; });
+    const draw = () => handle.getNodes().forEach((d, i) => { circles[i].__data__ = d; circles[i].setAttribute('cx', d.x); circles[i].setAttribute('cy', d.y); });
+    window.ticks = 0; window.completed = 0;
+    Emitter.subscribe(events)((event) => () => { if (event instanceof Emitter.Tick) { window.ticks++; draw(); } if (event instanceof Emitter.Completed) window.completed++; })();
+    draw();
+    circles.forEach((el) => Pointer.attachSimulationDrag(el)(handle.reheat)());
+    window.handle = handle; window.draw = draw;
+    window.state = () => handle.getNodes().map((d) => ({ id: d.id, x: d.x, y: d.y, fx: d.fx, fy: d.fy }));
+    window.ready = true;
+  };
+  if (wasm) initWasm_('/pkg/force_kernel.js')((error) => { window.failed = String(error); }, start); else start();
+`);
+execFileSync('esbuild', [join(scratch, 'handle-entry.js'), '--bundle', '--format=esm', `--outfile=${join(scratch, 'handle.js')}`, '--log-level=warning']);
+writeFileSync(join(scratch, 'handle.html'), '<!doctype html><body style="margin:0"><svg width="900" height="500"></svg><script type="module" src="handle.js"></script></body>');
+const kernel = join(homedir(), 'work/afc-work/purescript-hylograph-showcases/wasm-force-demo/pkg');
 writeFileSync(join(scratch, 'index.html'), '<!doctype html><body style="margin:0"><svg width="1200" height="700"></svg><script src="drag.js"></script></body>');
 
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.wasm': 'application/wasm' };
 const server = createServer((request, response) => {
   const path = normalize(decodeURIComponent(new URL(request.url, 'http://x').pathname));
-  const root = path.startsWith('/drag/') ? scratch : demo;
-  const file = path.startsWith('/drag/') ? path.slice(5) : path;
+  const root = path.startsWith('/drag/') ? scratch : path.startsWith('/pkg/') ? kernel : demo;
+  const file = path.startsWith('/drag/') ? path.slice(5) : path.startsWith('/pkg/') ? path.slice(4) : path;
   try {
     const body = readFileSync(join(root, file === '/' ? 'index.html' : file));
     response.writeHead(200, { 'content-type': types[extname(file)] || 'text/html' }).end(body);
@@ -193,6 +230,65 @@ try {
   }
   check(await page.evaluate(() => window.nodes.every((d) => Number.isFinite(d.x) && Number.isFinite(d.y))), 'every node is still somewhere finite');
   await page.close();
+
+  // -------------------------------------------------------------------------
+  // C. The high-level handle, on each engine
+  // -------------------------------------------------------------------------
+  for (const engine of ['default', 'wasm']) {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 900, height: 500 });
+    const problems = [];
+    page.on('pageerror', (error) => problems.push(String(error)));
+    await page.goto(`http://127.0.0.1:${PORT}/drag/handle.html?engine=${engine}`);
+    await page.waitForFunction(() => window.ready || window.failed, { timeout: 20000 });
+    const label = `${engine} engine`;
+    const state = () => page.evaluate(() => window.state());
+    // Do something that heats the simulation, then wait for it to run to completion again.
+    const untilCompleted = async (action) => {
+      const before = await page.evaluate(() => window.completed);
+      if (action) await page.evaluate(action);
+      try { await page.waitForFunction((n) => window.completed > n, { timeout: 15000 }, action ? before : 0); return true; }
+      catch { const seen = await page.evaluate(() => ({ ticks: window.ticks, completed: window.completed, alpha: window.handle.getAlpha() })); check(false, `${label}: a run did not complete (${JSON.stringify(seen)})`); return false; }
+    };
+    const close = (a, b, slack) => Math.abs(a - b) <= slack;
+
+    await untilCompleted(null);
+    const rested = await state();
+    check(rested.every((d) => close(d.x, 100 + d.id * 80, 0.5) && close(d.y, 200, 0.5)), `${label}: runs to completion with every node at its slot`);
+
+    // Drag node 2 after completion: the picture has to follow.
+    const from = { x: rested[2].x, y: rested[2].y };
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    for (let step = 1; step <= 10; step++) { await page.mouse.move(from.x + step * 7, from.y + step * 9); await sleep(30); }
+    await sleep(400);
+    const held = await page.evaluate(() => { const el = document.querySelectorAll('circle')[2]; return { cx: Number(el.getAttribute('cx')), cy: Number(el.getAttribute('cy')) }; });
+    check(close(held.cx, from.x + 70, 1) && close(held.cy, from.y + 90, 1), `${label}: after completion, a dragged node follows the pointer on screen (${(held.cx - from.x).toFixed(1)}, ${(held.cy - from.y).toFixed(1)} of 70, 90)`);
+    await page.mouse.up();
+    await sleep(100);
+    const let_go = await state();
+    await untilCompleted(() => window.handle.reheat());
+    const back = await state();
+    check(let_go[2].fx == null && let_go[2].fy == null && close(back[2].x, 260, 0.5) && close(back[2].y, 200, 0.5), `${label}: released on pointer up, and with a reheat it goes back to its slot`);
+
+    // pinNodes: every node pinned where it is, and a reheat moves nothing.
+    const startPositions = Object.fromEntries(back.map((d) => [String(d.id), { x: d.x, y: d.y }]));
+    const targetPositions = Object.fromEntries(back.map((d) => [String(d.id), { x: d.x + 40, y: d.y - 100 }]));
+    await page.evaluate((a, b) => { window.handle.interpolatePositions(a)(b)(0.25)(); window.draw(); }, startPositions, targetPositions);
+    const quarter = await state();
+    check(quarter.every((d, i) => close(d.x, back[i].x + 10, 1e-3) && close(d.y, back[i].y - 25, 1e-3)), `${label}: interpolatePositions puts every node a quarter of the way`);
+    await page.evaluate(() => window.handle.pinNodes());
+    const pinned = await state();
+    check(pinned.every((d, i) => d.fx != null && d.fy != null && close(d.fx, quarter[i].x, 1e-3) && close(d.fy, quarter[i].y, 1e-3)), `${label}: pinNodes pins every node where it is`);
+    await untilCompleted(() => window.handle.reheat());
+    const stillThere = await state();
+    check(stillThere.every((d, i) => close(d.x, quarter[i].x, 1e-3) && close(d.y, quarter[i].y, 1e-3)), `${label}: pinned nodes stay put through a whole run, against the force`);
+    await untilCompleted(() => { window.handle.unpinNodes(); window.handle.reheat(); });
+    const freed = await state();
+    check(freed.every((d) => d.fx == null && d.fy == null && close(d.x, 100 + d.id * 80, 0.5) && close(d.y, 200, 0.5)), `${label}: unpinNodes frees them, and the force takes them home`);
+    check(problems.length === 0 && !(await page.evaluate(() => window.failed)), `${label}: the page reported nothing${problems.length ? ': ' + problems[0] : ''}`);
+    await page.close();
+  }
 } finally {
   await browser.close();
   server.close();

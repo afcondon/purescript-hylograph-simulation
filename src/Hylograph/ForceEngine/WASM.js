@@ -429,6 +429,20 @@ export function syncNodesToWasm_(sim, nodes) {
   sim.set_fixed(fixed);
 }
 
+// Copy only the pinning (fx/fy, null = free) from PureScript nodes to the
+// kernel. Called before every tick: the nodes are where a drag sets and
+// clears a pin, and the kernel has to hear of it.
+export function syncPinsToWasm_(sim, nodes) {
+  const n = nodes.length;
+  const fixed = new Float32Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    const node = nodes[i];
+    fixed[i * 2] = node.fx == null ? NaN : node.fx;
+    fixed[i * 2 + 1] = node.fy == null ? NaN : node.fy;
+  }
+  sim.set_fixed(fixed);
+}
+
 // Copy position and velocity from the kernel back to PureScript nodes
 // (mutates nodes!)
 // New records, not the old ones written into: the nodes a caller was handed
@@ -532,6 +546,16 @@ export function snapshot_(sim) {
 
 export function restore_(sim, snapshot) {
   return sim.restore(snapshot);
+}
+
+// The nodes with the pins a snapshot recorded (its last 2n numbers, NaN =
+// free), as new records.
+export function withPinsFromSnapshot_(snapshot, nodes) {
+  const base = snapshot.length - nodes.length * 2;
+  return nodes.map((node, i) => {
+    const fx = snapshot[base + i * 2], fy = snapshot[base + i * 2 + 1];
+    return { ...node, fx: Number.isNaN(fx) ? null : fx, fy: Number.isNaN(fy) ? null : fy };
+  });
 }
 
 export function maxAcceleration_(sim) {
