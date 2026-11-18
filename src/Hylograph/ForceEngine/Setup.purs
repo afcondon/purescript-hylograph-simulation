@@ -29,11 +29,12 @@
 -- | `collide`, ...) and the `with...` builders are the intended way to make
 -- | one; a builder that does not apply to a force leaves it unchanged.
 -- |
--- | Seven forces are d3-force's and run on both engines. Five are not in
--- | d3-force (`towards`, `rectCollide`, `contain`, `cohesion`, `directional`),
--- | nor is a many-body force scoped by group; those run on the WASM engine
--- | only, and `applySetup` here (the D3 engine) throws on a setup that
--- | contains one rather than quietly dropping it.
+-- | Seven forces are d3-force's. Five are not (`towards`, `rectCollide`,
+-- | `contain`, `cohesion`, `directional`), nor is a many-body force scoped
+-- | by group, nor a collision with a filter or scaled by alpha. Both engines
+-- | run all of them: `applySetup` here is the default engine
+-- | (`hylograph-forces-pure`, PureScript, no D3), and
+-- | `Hylograph.ForceEngine.Setup.WASM.applySetup` is the Rust/WASM kernel.
 module Hylograph.ForceEngine.Setup
   ( -- * Value Types (static or dynamic)
     Value(..)
@@ -106,7 +107,7 @@ module Hylograph.ForceEngine.Setup
   , resolveLinks
   , linkValues
   , linkStrengths
-  , d3EngineSupports
+  , recipe
 
     -- * Setup Type
   , Setup
@@ -130,6 +131,7 @@ module Hylograph.ForceEngine.Setup
 
     -- * Apply to Simulation (the key function)
   , applySetup
+  , tryApplySetup
 
     -- * Apply with Data (GUP semantics)
   , GUPResult
@@ -150,17 +152,24 @@ module Hylograph.ForceEngine.Setup
 import Prelude
 
 import Data.Array as Array
-import Data.Foldable (for_)
+import Data.Either (Either(..))
 import Data.Int (toNumber)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe, isNothing)
+import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Number (nan)
 import Data.Set as Set
+import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Exception (throw)
 import Effect.Ref as Ref
 import Hylograph.ForceEngine.Core as Core
 import Hylograph.ForceEngine.Simulation (Simulation, SimulationNode, NodeID)
+import Hylograph.Forces.Pure as Pure
+import Hylograph.Forces.Pure.Contain as PureContain
+import Hylograph.Forces.Pure.Group as PureGroup
+import Hylograph.Forces.Pure.Link as PureLink
+import Hylograph.Forces.Pure.ManyBody as PureManyBody
 
 -- =============================================================================
 -- Value Type (static, or computed per node / per link)
@@ -233,8 +242,7 @@ type ManyBodyConfig node =
 
 -- | Which pairs of nodes a many-body force acts between. A node whose group
 -- | is `Nothing` is in no group: it has no same-group pairs, and is in a
--- | different group from everyone. Scopes other than `AllPairs` need the
--- | WASM engine.
+-- | different group from everyone.
 data ManyBodyScope node
   = AllPairs
   | WithinGroups (node -> Maybe Int)
@@ -242,8 +250,7 @@ data ManyBodyScope node
 
 -- | Circles that must not overlap.
 -- |
--- | `filter` and `alphaScaled` need the WASM engine. A node the filter leaves
--- | out collides with nothing. With `alphaScaled` the strength used is
+-- | A node the filter leaves out collides with nothing. With `alphaScaled` the strength used is
 -- | strength * alpha, so the collision weakens as the simulation cools and
 -- | gives way to forces that hold a node at a place; without it (d3's
 -- | collide) a collision is as hard at rest as in flight.
@@ -290,11 +297,12 @@ type RadialConfig node =
   , filter :: Maybe (node -> Boolean)
   }
 
--- | WASM engine only. A spring from each node to its own target point:
+-- | A spring from each node to its own target point:
 -- | v += (target - position) * strength * alpha. `Nothing` leaves a node
--- | alone. For morphing between layouts: the targets can be replaced
--- | between ticks without re-applying the setup
--- | (`Hylograph.ForceEngine.Setup.WASM.retarget`).
+-- | alone. For morphing between layouts: on the WASM engine the targets can
+-- | be replaced between ticks without re-applying the setup
+-- | (`Hylograph.ForceEngine.Setup.WASM.retarget`); on the default engine,
+-- | apply the setup again.
 type TowardsConfig node =
   { name :: String
   , target :: node -> Maybe { x :: Number, y :: Number }
@@ -302,7 +310,7 @@ type TowardsConfig node =
   , filter :: Maybe (node -> Boolean)
   }
 
--- | WASM engine only. Axis-aligned rectangles (for labels) that must not
+-- | Axis-aligned rectangles (for labels) that must not
 -- | overlap: an overlapping pair is pushed apart along the axis on which it
 -- | overlaps least, the larger rectangle moving less.
 type RectCollideConfig node =
@@ -313,7 +321,7 @@ type RectCollideConfig node =
   , iterations :: Int
   }
 
--- | WASM engine only. Keep nodes inside regions. Each node is confined to
+-- | Keep nodes inside regions. Each node is confined to
 -- | `regions !! i` where `region node == Just i` (`Nothing`: free), staying
 -- | `radius` inside the boundary. `strength` (0 to 1) steers a node that is
 -- | about to leave back toward the nearest allowed point; `hard` also clamps
@@ -335,7 +343,7 @@ data Region
   -- | Convex, vertices in either winding.
   | PolygonRegion (Array { x :: Number, y :: Number })
 
--- | WASM engine only. Pull each node toward the centroid of its group:
+-- | Pull each node toward the centroid of its group:
 -- | v += (centroid - position) * strength * alpha. `Nothing`: in no group.
 type CohesionConfig node =
   { name :: String
@@ -344,7 +352,7 @@ type CohesionConfig node =
   , filter :: Maybe (node -> Boolean)
   }
 
--- | WASM engine only. Over the simulation's links: push each link's target
+-- | Over the simulation's links: push each link's target
 -- | to be at least `gap` beyond its source along `axis` (children below
 -- | parents, with axis (0, 1)). Links already that far apart are left alone.
 type DirectionalConfig node =
@@ -452,36 +460,35 @@ positionY name = PositionYForce { name, target: Static 0.0, strength: Static 0.1
 radial :: forall node. String -> ForceConfig node
 radial name = RadialForce { name, radius: Static 100.0, x: 0.0, y: 0.0, strength: Static 0.1, filter: Nothing }
 
--- | Create a force pulling each node toward its own point (WASM engine).
+-- | Create a force pulling each node toward its own point.
 -- | Default: strength 0.1. A node whose target is `Nothing` is left alone.
 towards :: forall node. String -> (node -> Maybe { x :: Number, y :: Number }) -> ForceConfig node
 towards name target = TowardsForce { name, target, strength: Static 0.1, filter: Nothing }
 
--- | Create a rectangle collision force (WASM engine).
+-- | Create a rectangle collision force.
 -- | Default: half-width 1, half-height 1, strength 1, 1 iteration.
 rectCollide :: forall node. String -> ForceConfig node
 rectCollide name = RectCollideForce
   { name, halfWidth: Static 1.0, halfHeight: Static 1.0, strength: 1.0, iterations: 1 }
 
--- | Create a containment force keeping every node in one region (WASM
--- | engine). Default: radius 0, strength 1, with the hard limit on. For
+-- | Create a containment force keeping every node in one region. Default: radius 0, strength 1, with the hard limit on. For
 -- | several regions use `withRegions` and `withRegion`.
 contain :: forall node. String -> Region -> ForceConfig node
 contain name region = ContainForce
   { name, regions: [ region ], region: const (Just 0), radius: Static 0.0, strength: 1.0, hard: true }
 
--- | Create a containment force keeping each node in a region of its own
--- | (WASM engine): node `n` in `regions !! i` where `region n == Just i`, and
+-- | Create a containment force keeping each node in a region of its own:
+-- | node `n` in `regions !! i` where `region n == Just i`, and
 -- | free where it is `Nothing`. Defaults as `contain`.
 containEach :: forall node. String -> Array Region -> (node -> Maybe Int) -> ForceConfig node
 containEach name regions region = ContainForce
   { name, regions, region, radius: Static 0.0, strength: 1.0, hard: true }
 
--- | Create a group cohesion force (WASM engine). Default: strength 0.1.
+-- | Create a group cohesion force. Default: strength 0.1.
 cohesion :: forall node. String -> (node -> Maybe Int) -> ForceConfig node
 cohesion name group = CohesionForce { name, group, strength: Static 0.1, filter: Nothing }
 
--- | Create a directional link constraint (WASM engine).
+-- | Create a directional link constraint.
 -- | Default: gap 30 along (0, 1) (targets below sources), strength 1.
 directional :: forall node. String -> ForceConfig node
 directional name = DirectionalForce
@@ -609,7 +616,7 @@ withDistanceMax v = case _ of
 
 -- | Add a filter predicate: the force only applies to matching nodes.
 -- | For ManyBody (a filtered-out node exerts no charge but is still pushed),
--- | Collide (a filtered-out node collides with nothing; WASM engine),
+-- | Collide (a filtered-out node collides with nothing),
 -- | PositionX, PositionY, Radial, Towards and Cohesion.
 withFilter :: forall node. (node -> Boolean) -> ForceConfig node -> ForceConfig node
 withFilter pred = case _ of
@@ -623,7 +630,7 @@ withFilter pred = case _ of
   other -> other
 
 -- | Make a collision's strength follow alpha, so that it yields as the
--- | simulation cools (for Collide; WASM engine). Off by default.
+-- | simulation cools (for Collide). Off by default.
 withAlphaScaling :: forall node. Boolean -> ForceConfig node -> ForceConfig node
 withAlphaScaling alphaScaled = case _ of
   CollideForce c -> CollideForce c { alphaScaled = alphaScaled }
@@ -850,47 +857,20 @@ withVelocityDecay = withVelocityRetention
 -- Apply Setup to Simulation (the key function)
 -- =============================================================================
 
--- | Can the D3 engine run this force? It has d3-force's seven forces and
--- | nothing else: no Towards, RectCollide, Contain, Cohesion or Directional,
--- | no ManyBody scoped by group, and no Collide with a filter or scaled by
--- | alpha.
-d3EngineSupports :: forall node. ForceConfig node -> Boolean
-d3EngineSupports = case _ of
-  ManyBodyForce c -> case c.scope of
-    AllPairs -> true
-    WithinGroups _ -> false
-    BetweenGroups _ -> false
-  CollideForce c -> isNothing c.filter && not c.alphaScaled
-  LinkForce _ -> true
-  CenterForce _ -> true
-  PositionXForce _ -> true
-  PositionYForce _ -> true
-  RadialForce _ -> true
-  TowardsForce _ -> false
-  RectCollideForce _ -> false
-  ContainForce _ -> false
-  CohesionForce _ -> false
-  DirectionalForce _ -> false
-
--- | Throw if the D3 engine cannot run a force, naming it.
-requireD3Support :: forall node. ForceConfig node -> Effect Unit
-requireD3Support fc = unless (d3EngineSupports fc) do
-  throw $ "Hylograph.ForceEngine.Setup: the D3 engine cannot run the force \""
-    <> forceName fc
-    <> "\". Towards, RectCollide, Contain, Cohesion, Directional, group-scoped ManyBody "
-    <> "and a Collide with a filter or scaled by alpha exist only in the WASM engine (Hylograph.ForceEngine.Setup.WASM). "
-    <> "Nothing was applied."
-
 -- | Apply a setup to a simulation.
 -- |
 -- | This is idempotent - calling with the same setup does minimal work:
 -- | - Forces in setup but not simulation: create and add
 -- | - Forces in simulation but not setup: remove
 -- |
--- | After applying, forces are re-initialized with current nodes.
+-- | Every force is made afresh for the simulation's current nodes and links:
+-- | `dynamic` values, filters, groups and regions are evaluated then, once
+-- | per node or per link. Apply the setup again after changing what they
+-- | read. Each tick applies the forces in order of their names.
 -- |
--- | Throws, before changing anything, if the setup contains a force the D3
--- | engine does not have (see `d3EngineSupports`).
+-- | Throws, before changing anything, if a link names a node that is not
+-- | among the nodes (`node not found: <id>`, as d3-force says it).
+-- | `tryApplySetup` returns that as a value instead.
 -- |
 -- | Example:
 -- | ```purescript
@@ -906,179 +886,196 @@ applySetup
   -> Simulation row linkRow
   -> Effect Unit
 applySetup setupConfig sim = do
-  for_ setupConfig.forces requireD3Support
+  outcome <- tryApplySetup setupConfig sim
+  case outcome of
+    Left problem -> throw ("Hylograph.ForceEngine.Setup: " <> problem <> ". Nothing was applied.")
+    Right _ -> pure unit
 
+-- | `applySetup`, with the one thing that can go wrong as a value: `Left`
+-- | names the first link end that is no node's id (`node not found: <id>`),
+-- | and the simulation is left as it was.
+tryApplySetup
+  :: forall row linkRow
+   . Setup (SimulationNode row)
+  -> Simulation row linkRow
+  -> Effect (Either String Unit)
+tryApplySetup setupConfig sim = do
   nodes <- Ref.read sim.nodes
   links <- Ref.read sim.links
-  currentForces <- Ref.read sim.forces
+  let
+    ids = map (\l -> { source: l.source, target: l.target }) links
+    made = traverse
+      (\fc -> map (Tuple (forceName fc)) (Core.initializeForce sim.random nodes ids (recipe fc)))
+      setupConfig.forces
+  case made of
+    Left problem -> pure (Left problem)
+    Right handles -> do
+      -- A later force replaces an earlier one of the same name; forces in
+      -- the simulation that the setup does not name are dropped.
+      Ref.write (Map.fromFoldable handles) sim.forces
+      -- Note: the other params (alphaDecay, etc.) are in sim.config, which
+      -- is fixed when the simulation is created.
+      Ref.write setupConfig.params.alpha sim.alpha
+      pure (Right unit)
 
-  -- Compute which forces to remove (forces in sim but not in setup)
-  let desiredNames = Set.fromFoldable $ map forceName setupConfig.forces
-  let currentNames = Set.fromFoldable $ Map.keys currentForces
-  let toRemove = Set.difference currentNames desiredNames
-
-  -- Remove forces no longer in setup
-  for_ (Set.toUnfoldable toRemove :: Array String) \name -> do
-    Ref.modify_ (Map.delete name) sim.forces
-
-  -- Add/update each force in setup
-  for_ setupConfig.forces \fc -> do
-    -- Always create fresh handle to ensure params are up to date
-    handle <- createForceHandle nodes links fc
-
-    -- Initialize with current nodes (and links for link forces)
-    _ <- case fc of
-      LinkForce _ -> Core.initializeLinkForce handle nodes links
-      _ -> Core.initializeForce handle nodes
-
-    -- Store in simulation
-    Ref.modify_ (Map.insert (forceName fc) handle) sim.forces
-
-  -- Apply simulation params
-  Ref.write setupConfig.params.alpha sim.alpha
-  -- Note: Other params (alphaDecay, etc.) are stored in sim.config
-  -- which is immutable after creation. For now we just update alpha.
-
--- | Create a D3 force handle from our config.
+-- | What a force of a setup is to the default engine: how to make it once
+-- | the nodes and links are known.
 -- |
--- | What the D3 engine does with each parameter:
--- | - per node (`dynamic`): Collide radius, PositionX/PositionY target. A
--- |   `dynamic` strength (ManyBody, PositionX/Y, Radial) or Radial radius is
--- |   read as 0, as it always has been; the WASM engine evaluates them.
--- | - filters: ManyBody, Radial, PositionX, PositionY.
--- | - Link distance and strength: per link, and `ByDegree`.
-createForceHandle
-  :: forall row linkRow
-   . Array (SimulationNode row)
-  -> Array { source :: NodeID, target :: NodeID | linkRow }
-  -> ForceConfig (SimulationNode row)
-  -> Effect Core.ForceHandle
-createForceHandle nodes links fc = do
-  requireD3Support fc
-  pure $ case fc of
-    ManyBodyForce c -> case c.filter of
-      -- Filtered variant - only applies to matching nodes
-      Just predicate -> Core.createManyBodyFiltered
-        { strength: valueToNumber c.strength
-        , theta: c.theta
-        , distanceMin: c.distanceMin
-        , distanceMax: c.distanceMax
-        , filter: predicate
-        }
-      -- Standard variant
-      Nothing -> Core.createManyBody
-        { strength: valueToNumber c.strength
-        , theta: c.theta
-        , distanceMin: c.distanceMin
-        , distanceMax: c.distanceMax
-        }
+-- | - per node (`dynamic`): every strength, radius, target and half-extent;
+-- | - filters: a filtered-out node has strength 0 (ManyBody, PositionX/Y,
+-- |   Radial, Towards, Cohesion) or collides with nothing (Collide);
+-- | - per link: distance, strength, gap, and `ByDegree`.
+recipe :: forall row. ForceConfig (SimulationNode row) -> Core.ForceRecipe row
+recipe = case _ of
+  ManyBodyForce c -> Core.ForceRecipe \random nodes _ ->
+    Right $ Pure.manyBody
+      { strength: filtered c.filter (valueOf c.strength)
+      , theta: c.theta
+      , distanceMin: c.distanceMin
+      , distanceMax: c.distanceMax
+      , scope: case c.scope of
+          AllPairs -> PureManyBody.everyPair
+          WithinGroups _ -> PureManyBody.withinGroups
+          BetweenGroups _ -> PureManyBody.betweenGroups
+      , group: case c.scope of
+          AllPairs -> \_ -> PureGroup.ungrouped
+          WithinGroups group -> membership group
+          BetweenGroups group -> membership group
+      }
+      random
+      nodes
 
-    CollideForce c -> case c.radius of
-      Static r -> Core.createCollide
-        { radius: r
+  CollideForce c -> Core.ForceRecipe \random nodes _ ->
+    Right $ Pure.collide
+      { radius: valueOf c.radius
+      , strength: c.strength
+      , iterations: c.iterations
+      , include: fromMaybe (\_ -> true) c.filter
+      , alphaScaled: c.alphaScaled
+      }
+      random
+      nodes
+
+  LinkForce c -> Core.ForceRecipe \random nodes links -> do
+    ended <- withEnds nodes links
+    Pure.linkById _.id
+      { distance: \l -> valueOf c.distance l.ends
+      , strength: case c.strength of
+          ByDegree -> PureLink.strengthFromDegree
+          LinkStrength value -> PureLink.strengthPerLink \l -> valueOf value l.ends
+      , iterations: c.iterations
+      }
+      random
+      nodes
+      ended
+
+  CenterForce c -> Core.ForceRecipe \_ nodes _ ->
+    Right $ Pure.center { x: c.x, y: c.y, strength: c.strength } nodes
+
+  PositionXForce c -> Core.ForceRecipe \_ nodes _ ->
+    Right $ Pure.positionX { target: valueOf c.target, strength: filtered c.filter (valueOf c.strength) } nodes
+
+  PositionYForce c -> Core.ForceRecipe \_ nodes _ ->
+    Right $ Pure.positionY { target: valueOf c.target, strength: filtered c.filter (valueOf c.strength) } nodes
+
+  RadialForce c -> Core.ForceRecipe \_ nodes _ ->
+    Right $ Pure.radial
+      { radius: valueOf c.radius, strength: filtered c.filter (valueOf c.strength), x: c.x, y: c.y }
+      nodes
+
+  TowardsForce c -> Core.ForceRecipe \_ nodes _ ->
+    Right $ Pure.towards
+      { target: \node -> fromMaybe { x: nan, y: nan } (c.target node)
+      , strength: filtered c.filter (valueOf c.strength)
+      }
+      nodes
+
+  RectCollideForce c -> Core.ForceRecipe \_ nodes _ ->
+    Right $ Pure.rectCollide
+      { halfWidth: valueOf c.halfWidth
+      , halfHeight: valueOf c.halfHeight
+      , strength: c.strength
+      , iterations: c.iterations
+      }
+      nodes
+
+  ContainForce c -> Core.ForceRecipe \_ nodes _ ->
+    let
+      regions = map regionOf c.regions
+    in
+      Right $ Pure.contain
+        { region: \node -> case c.region node >>= Array.index regions of
+            Just region -> PureContain.within region
+            Nothing -> PureContain.free
+        , radius: valueOf c.radius
         , strength: c.strength
-        , iterations: c.iterations
+        , hard: c.hard
         }
-      Dynamic radiusFn -> Core.createCollideDynamic
-        { radiusAccessor: radiusFn
-        , strength: c.strength
-        , iterations: c.iterations
-        }
+        nodes
 
-    LinkForce c -> case c.distance, c.strength of
-      -- One distance and one strength for every link
-      Static distance, LinkStrength (Static strength) -> Core.createLink
-        { distance
-        , strength
-        , iterations: c.iterations
-        }
-      -- Otherwise one of each per link, evaluated here
-      _, _ ->
-        let
-          ends = resolveLinks nodes links
-        in
-          Core.createLinkPerLink
-            { distances: linkValues c.distance ends
-            , strengths: linkStrengths c.strength ends
-            , iterations: c.iterations
-            }
+  CohesionForce c -> Core.ForceRecipe \_ nodes _ ->
+    Right $ Pure.cohesion
+      { group: membership c.group, strength: filtered c.filter (valueOf c.strength) }
+      nodes
 
-    CenterForce c ->
-      Core.createCenter
-        { x: c.x
-        , y: c.y
-        , strength: c.strength
-        }
+  DirectionalForce c -> Core.ForceRecipe \_ nodes links -> do
+    ended <- withEnds nodes links
+    Pure.directionalById _.id
+      { gap: \l -> valueOf c.gap l.ends
+      , strength: \l -> valueOf c.strength l.ends
+      , axis: c.axis
+      , iterations: c.iterations
+      }
+      nodes
+      ended
 
-    PositionXForce c -> case c.target, c.filter of
-      Static x, Nothing -> Core.createForceX
-        { x: x
-        , strength: valueToNumber c.strength
-        }
-      Dynamic xFn, Nothing -> Core.createForceXDynamic
-        { xAccessor: xFn
-        , strength: valueToNumber c.strength
-        }
-      target, Just predicate -> Core.createForceXFiltered
-        { xAccessor: targetOf target
-        , strength: valueToNumber c.strength
-        , filter: predicate
-        }
-
-    PositionYForce c -> case c.target, c.filter of
-      Static y, Nothing -> Core.createForceY
-        { y: y
-        , strength: valueToNumber c.strength
-        }
-      Dynamic yFn, Nothing -> Core.createForceYDynamic
-        { yAccessor: yFn
-        , strength: valueToNumber c.strength
-        }
-      target, Just predicate -> Core.createForceYFiltered
-        { yAccessor: targetOf target
-        , strength: valueToNumber c.strength
-        , filter: predicate
-        }
-
-    RadialForce c -> case c.filter of
-      -- Filtered variant - only applies to matching nodes
-      Just predicate -> Core.createRadialFiltered
-        { radius: valueToNumber c.radius
-        , x: c.x
-        , y: c.y
-        , strength: valueToNumber c.strength
-        , filter: predicate
-        }
-      -- Standard variant
-      Nothing -> Core.createRadial
-        { radius: valueToNumber c.radius
-        , x: c.x
-        , y: c.y
-        , strength: valueToNumber c.strength
-        }
-
-    -- Unreachable: requireD3Support has thrown for these. A force that
-    -- does nothing, so that the case is total.
-    TowardsForce _ -> inert
-    RectCollideForce _ -> inert
-    ContainForce _ -> inert
-    CohesionForce _ -> inert
-    DirectionalForce _ -> inert
-  where
-  inert = Core.createCenter { x: 0.0, y: 0.0, strength: 0.0 }
-
--- | A positioning target as a function of the node.
-targetOf :: forall node. Value node Number -> node -> Number
-targetOf = case _ of
-  Static x -> const x
+-- | A value as a function of what it is computed from.
+valueOf :: forall item. Value item Number -> item -> Number
+valueOf = case _ of
+  Static n -> \_ -> n
   Dynamic f -> f
+
+-- | A strength that is zero for the nodes a filter leaves out.
+filtered :: forall node. Maybe (node -> Boolean) -> (node -> Number) -> node -> Number
+filtered keep strength = case keep of
+  Nothing -> strength
+  Just include -> \node -> if include node then strength node else 0.0
+
+membership :: forall node. (node -> Maybe Int) -> node -> PureGroup.Membership
+membership group node = case group node of
+  Just number -> PureGroup.inGroup number
+  Nothing -> PureGroup.ungrouped
+
+regionOf :: Region -> PureContain.Region
+regionOf = case _ of
+  RectRegion r -> PureContain.rectangle r.x0 r.y0 r.x1 r.y1
+  CircleRegion c -> PureContain.circle c.x c.y c.radius
+  PolygonRegion vertices -> PureContain.polygon vertices
+
+-- | Each link with the nodes at its ends, or the first end that is no
+-- | node's id.
+withEnds
+  :: forall row
+   . Array (SimulationNode row)
+  -> Core.Links
+  -> Either String (Array { source :: NodeID, target :: NodeID, ends :: LinkEnds (SimulationNode row) })
+withEnds nodes links = traverse ended (Array.mapWithIndex Tuple links)
+  where
+  byId = Map.fromFoldable $ map (\node -> Tuple node.id node) nodes
+  find id = case Map.lookup id byId of
+    Just node -> Right node
+    Nothing -> Left ("node not found: " <> show id)
+  ended (Tuple index l) = do
+    source <- find l.source
+    target <- find l.target
+    pure { source: l.source, target: l.target, ends: { source, target, index } }
 
 -- =============================================================================
 -- Incremental Operations (for fine-grained control)
 -- =============================================================================
 
 -- | Add a single force to simulation (without full setup).
--- | Throws if the D3 engine does not have the force.
+-- | Throws if a link names a node that is not among the nodes.
 addForceToSim
   :: forall row linkRow
    . ForceConfig (SimulationNode row)
@@ -1087,11 +1084,9 @@ addForceToSim
 addForceToSim fc sim = do
   nodes <- Ref.read sim.nodes
   links <- Ref.read sim.links
-  handle <- createForceHandle nodes links fc
-  _ <- case fc of
-    LinkForce _ -> Core.initializeLinkForce handle nodes links
-    _ -> Core.initializeForce handle nodes
-  Ref.modify_ (Map.insert (forceName fc) handle) sim.forces
+  case Core.initializeForce sim.random nodes (map (\l -> { source: l.source, target: l.target }) links) (recipe fc) of
+    Left problem -> throw ("Hylograph.ForceEngine.Setup: " <> problem)
+    Right handle -> Ref.modify_ (Map.insert (forceName fc) handle) sim.forces
 
 -- | Remove a single force from simulation by name
 removeForceFromSim
@@ -1175,10 +1170,8 @@ applySetupWithData setupConfig desiredNodes desiredLinks sim = do
   -- Write merged nodes to simulation
   Ref.write nodeResult.merged sim.nodes
 
-  -- CRITICAL: Initialize node positions for any nodes that don't have them yet.
-  -- D3 forces require nodes to have x, y, vx, vy for collision detection and
-  -- force calculations to work. Without this, entered nodes have no positions
-  -- and forces (especially collision) don't work.
+  -- Give entered nodes what the forces need: an index, a velocity, and a
+  -- place (d3's phyllotaxis spiral) if they have none.
   Core.initializeNodes nodeResult.merged
 
   -- Compute link GUP

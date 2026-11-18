@@ -6,7 +6,7 @@
 -- | Supported:
 -- | - TransitionState from Engine.purs
 -- | - TransitionGroup from Engine.purs
--- | - D3 force simulation (via ForceEngine)
+-- | - force simulation (via ForceEngine)
 -- |
 -- | Documented (requires local FFI):
 -- | - WASM force kernel (see pattern at bottom of file)
@@ -94,10 +94,10 @@ transitionGroupConsumer groupRef onValues deltaMs = do
     else StillRunning
 
 -- =============================================================================
--- D3 Force Simulation Consumer
+-- Force Simulation Consumer
 -- =============================================================================
 
--- | Create a tick function for a D3 force simulation.
+-- | Create a tick function for a force simulation.
 -- |
 -- | The simulation's `tick` function is called on each frame.
 -- | Returns Converged with the alpha value, or Completed when alpha drops below threshold.

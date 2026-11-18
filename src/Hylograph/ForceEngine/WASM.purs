@@ -1,8 +1,8 @@
 -- | WASM Force Engine
 -- |
 -- | High-performance force simulation using Rust/WebAssembly.
--- | Informally observed to be faster than the D3 kernel on large graphs;
--- | no benchmark is stored and the figure has not been re-measured.
+-- | Faster than the default (PureScript) kernel; the README has the
+-- | measurement.
 -- |
 -- | Usage:
 -- | ```purescript

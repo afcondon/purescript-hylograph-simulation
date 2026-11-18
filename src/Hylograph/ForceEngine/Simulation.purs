@@ -6,42 +6,18 @@
 -- | - Running the animation loop
 -- | - Handling tick callbacks for rendering
 -- |
--- | Unlike D3's simulation, we have full control over:
--- | - When forces are applied
--- | - How alpha decays
--- | - When to render
+-- | The forces are PureScript (`hylograph-forces-pure`: d3-force's seven,
+-- | bit for bit, and the Rust kernel's additions). There is no D3 here. Each
+-- | simulation has its own seeded generator for separating coincident nodes,
+-- | so the same nodes, links and forces give the same layout every time.
 -- |
--- | == IMPORTANT: Force Target Caching
+-- | == IMPORTANT: forces read their values when they are initialized
 -- |
--- | D3's forceX/forceY forces **cache** their target values at initialization time.
--- | This is a significant gotcha when animating between different target positions.
--- |
--- | **The Problem:**
--- |
--- | If you update `node.gridX` and call `reheat`, the force will still use the
--- | old cached values. The simulation appears to run but nodes won't move to
--- | new positions.
--- |
--- | **Wrong approach:**
--- | ```purescript
--- | updateGridXWithFn newXFn sim
--- | reheat sim  -- Nodes don't move!
--- | ```
--- |
--- | **Correct approach:**
--- | ```purescript
--- | -- Use the helper that handles re-initialization:
--- | updateGridXYAndReinit (Just newXFn) Nothing forceXHandle Nothing sim
--- |
--- | -- Or manually re-initialize the force:
--- | updateGridXWithFn newXFn sim
--- | currentNodes <- getNodes sim
--- | _ <- Core.initializeForce forceXHandle currentNodes
--- | reheat sim
--- | ```
--- |
--- | The `updateGridXYAndReinit` function is the recommended way to animate
--- | force-directed transitions as it handles this caching issue automatically.
+-- | A force evaluates its per-node and per-link values (targets, radii,
+-- | strengths, filters) once, when it is given its nodes. If you update
+-- | `node.gridX` and call `reheat`, a force whose target reads `gridX` still
+-- | has the old values. `setNodes`, `setLinks`, `reinitializeForces` and
+-- | `updateGridXYAndReinit` make every force again from its recipe.
 module Hylograph.ForceEngine.Simulation
   ( -- * Node Types
     SimulationNode
@@ -63,9 +39,11 @@ module Hylograph.ForceEngine.Simulation
   , setNodes
   , setLinks
   , addForce
+  , addForceRecipe
   , addForceHandle
   , removeForce
   , clearForces
+  , reinitializeForces
     -- * Running
   , start
   , stop
@@ -104,15 +82,16 @@ module Hylograph.ForceEngine.Simulation
 import Prelude
 
 import Data.Array as Array
+import Data.Either (Either(..))
 import Data.Foldable (for_)
+import Data.Traversable (traverse)
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
-import Data.Tuple (Tuple(..))
 import Data.Nullable (Nullable)
 import Foreign.Object (Object)
 import Effect (Effect)
-import Effect.Console (log)
+import Effect.Exception (throw)
 import Type.Row (type (+))
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
@@ -159,7 +138,6 @@ type SimulationNode r = Record (D3_ID + D3_XY + D3_VxyFxy + r)
 type Link id r = { source :: id, target :: id | r }
 
 -- | Swizzled link where source/target are node object references
--- | After D3 processes links, indices become object references
 type SwizzledLink nodeData r =
   { source :: SimulationNode nodeData
   , target :: SimulationNode nodeData
@@ -171,7 +149,8 @@ type SwizzledLink nodeData r =
 type Simulation row linkRow =
   { nodes :: Ref (Array (SimulationNode row))
   , links :: Ref (Array { source :: Int, target :: Int | linkRow })
-  , forces :: Ref (Map String Core.ForceHandle)
+  , forces :: Ref (Map String (Core.ForceHandle row))
+  , random :: Core.RandomSource  -- separates coincident nodes; seeded, one per simulation
   , alpha :: Ref Number
   , prevAlpha :: Ref Number  -- For alpha threshold detection
   , config :: SimConfig
@@ -215,10 +194,12 @@ create config = do
   runningRef <- Ref.new false
   cancelRef <- Ref.new (pure unit)
   tickRef <- Ref.new (pure unit)
+  random <- Core.randomSource
   pure
     { nodes: nodesRef
     , links: linksRef
     , forces: forcesRef
+    , random
     , alpha: alphaRef
     , prevAlpha: prevAlphaRef
     , config
@@ -250,10 +231,12 @@ createWithCallbacks config cbs = do
   runningRef <- Ref.new false
   cancelRef <- Ref.new (pure unit)
   tickRef <- Ref.new (pure unit)
+  random <- Core.randomSource
   pure
     { nodes: nodesRef
     , links: linksRef
     , forces: forcesRef
+    , random
     , alpha: alphaRef
     , prevAlpha: prevAlphaRef
     , config
@@ -264,76 +247,54 @@ createWithCallbacks config cbs = do
     }
 
 -- | Set the nodes for the simulation
--- | This initializes nodes and re-initializes all forces
+-- | This initializes the nodes and makes every force again for them
 setNodes :: forall row linkRow.
   Array (SimulationNode row)
   -> Simulation row linkRow
   -> Effect Unit
 setNodes nodes sim = do
-  -- Initialize nodes (sets index, default vx/vy)
+  -- Sets index, pins, default velocity, and a place for a node without one
   Core.initializeNodes nodes
   Ref.write nodes sim.nodes
-
-  -- Re-initialize all forces with new nodes
-  forces <- Ref.read sim.forces
-  for_ (Map.toUnfoldable forces :: Array (Tuple String Core.ForceHandle)) \(Tuple _ handle) -> do
-    _ <- Core.initializeForce handle nodes
-    pure unit
+  reinitializeForces sim
 
 -- | Set the links for the simulation
--- | This re-initializes any link forces
+-- | This makes every force again, so that link forces see the new links
 setLinks :: forall row linkRow.
   Array { source :: Int, target :: Int | linkRow }
   -> Simulation row linkRow
   -> Effect Unit
 setLinks links sim = do
   Ref.write links sim.links
-  -- TODO: Re-initialize link forces when we track force types
+  reinitializeForces sim
+
+-- | Make every force again from its recipe, for the simulation's current
+-- | nodes and links. Needed after anything a force's per-node or per-link
+-- | values are computed from has changed.
+-- |
+-- | Throws, changing nothing, if a link names a node that is not among the
+-- | nodes (`node not found: <id>`).
+reinitializeForces :: forall row linkRow. Simulation row linkRow -> Effect Unit
+reinitializeForces sim = do
+  nodes <- Ref.read sim.nodes
+  links <- Ref.read sim.links
+  forces <- Ref.read sim.forces
+  case traverse (Core.reinitializeForce sim.random nodes (linkIds links)) forces of
+    Left problem -> throw ("Hylograph.ForceEngine.Simulation: " <> problem)
+    Right made -> Ref.write made sim.forces
+
+-- | The links as the forces want them: the two ids and nothing else.
+linkIds :: forall linkRow. Array { source :: Int, target :: Int | linkRow } -> Core.Links
+linkIds = map \link -> { source: link.source, target: link.target }
 
 -- | Add a force to the simulation
 addForce :: forall row linkRow.
   ForceSpec
   -> Simulation row linkRow
   -> Effect Unit
-addForce spec sim = do
-  nodes <- Ref.read sim.nodes
-  links <- Ref.read sim.links
-
-  -- Create the force handle
-  handle <- case spec of
-    ManyBody _ config -> do
-      let h = Core.createManyBody config
-      Core.initializeForce h nodes
-
-    Collide _ config -> do
-      let h = Core.createCollide config
-      Core.initializeForce h nodes
-
-    Link _ config -> do
-      let h = Core.createLink config
-      Core.initializeLinkForce h nodes links
-
-    Center _ config -> do
-      let h = Core.createCenter config
-      Core.initializeForce h nodes
-
-    PositionX _ config -> do
-      let h = Core.createForceX config
-      Core.initializeForce h nodes
-
-    PositionY _ config -> do
-      let h = Core.createForceY config
-      Core.initializeForce h nodes
-
-    Radial _ config -> do
-      let h = Core.createRadial config
-      Core.initializeForce h nodes
-
-  -- Add to forces map
-  let name = forceName spec
-  Ref.modify_ (Map.insert name handle) sim.forces
+addForce spec sim = addForceRecipe name recipe sim
   where
-  forceName = case _ of
+  name = case spec of
     ManyBody n _ -> n
     Collide n _ -> n
     Link n _ -> n
@@ -341,17 +302,42 @@ addForce spec sim = do
     PositionX n _ -> n
     PositionY n _ -> n
     Radial n _ -> n
+  recipe = case spec of
+    ManyBody _ config -> Core.createManyBody config
+    Collide _ config -> Core.createCollide config
+    Link _ config -> Core.createLink config
+    Center _ config -> Core.createCenter config
+    PositionX _ config -> Core.createForceX config
+    PositionY _ config -> Core.createForceY config
+    Radial _ config -> Core.createRadial config
 
--- | Add a pre-initialized force handle to the simulation
--- | Use this when you've created and initialized a force handle manually
--- | (e.g., for dynamic forces not covered by ForceSpec)
-addForceHandle :: forall row linkRow.
-  String                     -- Force name (used for later removal)
-  -> Core.ForceHandle        -- Pre-initialized force handle
+-- | Add a force from its recipe, under a name (used for later removal). A
+-- | force already there under that name is replaced.
+-- |
+-- | Throws, changing nothing, if a link names a node that is not among the
+-- | nodes.
+addForceRecipe :: forall row linkRow.
+  String
+  -> Core.ForceRecipe row
   -> Simulation row linkRow
   -> Effect Unit
-addForceHandle name handle sim = do
-  Ref.modify_ (Map.insert name handle) sim.forces
+addForceRecipe name recipe sim = do
+  nodes <- Ref.read sim.nodes
+  links <- Ref.read sim.links
+  case Core.initializeForce sim.random nodes (linkIds links) recipe of
+    Left problem -> throw ("Hylograph.ForceEngine.Simulation: " <> problem)
+    Right handle -> Ref.modify_ (Map.insert name handle) sim.forces
+
+-- | Deprecated: the old name of `addForceRecipe`. A force used to be handed
+-- | over as a handle that had already been initialized; it is now handed
+-- | over as a recipe and initialized here, so a call to
+-- | `Core.initializeForce` before this one is no longer needed.
+addForceHandle :: forall row linkRow.
+  String
+  -> Core.ForceRecipe row
+  -> Simulation row linkRow
+  -> Effect Unit
+addForceHandle = addForceRecipe
 
 -- | Remove a force from the simulation
 removeForce :: forall row linkRow.
@@ -423,15 +409,15 @@ tick sim = do
   alpha <- Ref.read sim.alpha
   prevAlpha <- Ref.read sim.prevAlpha
 
-  -- Apply all forces
+  -- Apply all forces, in order of their names
   let forceHandles = Array.fromFoldable $ Map.values forces
-  let forceNames = Array.fromFoldable $ Map.keys forces
-  when (alpha > 0.99) do
-    log $ "[tick] Forces in sim: " <> show (Array.length forceHandles) <> " - " <> show forceNames
   Core.applyForces forceHandles alpha
 
   -- Integrate positions
   Core.integratePositions nodes sim.config.velocityRetention
+
+  -- Hard containment, then pins again
+  Core.constrain forceHandles nodes
 
   -- Decay alpha
   let newAlpha = Core.decayAlpha alpha sim.config.alphaMin sim.config.alphaDecay sim.config.alphaTarget
@@ -594,7 +580,7 @@ foreign import pinNodesAtPositions_
   :: forall row. PositionMap -> Ref (Array (SimulationNode row)) -> Effect Unit
 
 -- | Update node positions in place from a position map
--- | Mutates the simulation's internal nodes (same objects bound to D3)
+-- | Mutates the simulation's internal nodes (the same objects the DOM is bound to)
 updatePositionsInPlace :: forall row linkRow.
   PositionMap
   -> Simulation row linkRow
@@ -680,63 +666,32 @@ updateGridYWithFn :: forall row linkRow.
 updateGridYWithFn fn sim =
   updateGridYWithFn_ fn sim.nodes
 
--- | Update gridX and/or gridY for all nodes and re-initialize the forces
+-- | Update gridX and/or gridY for all nodes, make the forces again so that
+-- | they read the new values, and reheat.
 -- |
--- | This is the recommended way to animate force-directed transitions.
--- | It handles the D3 force caching issue automatically by:
--- | 1. Updating gridX/gridY values on nodes
--- | 2. Re-initializing the ForceXGrid/ForceYGrid forces (so they pick up new targets)
--- | 3. Reheating the simulation
--- |
--- | IMPORTANT: D3's forceX/forceY cache target values at initialization time.
--- | Simply updating node.gridX/gridY won't make the force see new values.
--- | This function handles that by re-initializing the forces after updating.
+-- | This is the recommended way to animate force-directed transitions: a
+-- | force reads its targets when it is initialized, so updating
+-- | `node.gridX` alone changes nothing.
 -- |
 -- | Example:
 -- | ```purescript
 -- | -- Move nodes to new X positions (Y unchanged)
--- | updateGridXYAndReinit
--- |   (Just (\node -> departmentX node.department))
--- |   Nothing
--- |   forceXHandle
--- |   Nothing
--- |   sim
--- |
--- | -- Move nodes to new X and Y positions
--- | updateGridXYAndReinit
--- |   (Just xFn)
--- |   (Just yFn)
--- |   forceXHandle
--- |   (Just forceYHandle)
--- |   sim
+-- | updateGridXYAndReinit (Just (\node -> departmentX node.department)) Nothing sim
 -- | ```
+-- |
+-- | (Until 2026-11-18 this also took the handles of the forces to
+-- | re-initialize; it now re-initializes them all.)
 updateGridXYAndReinit :: forall row linkRow.
   Maybe (SimulationNode row -> Number)  -- ^ gridX update function (Nothing = don't update X)
   -> Maybe (SimulationNode row -> Number)  -- ^ gridY update function (Nothing = don't update Y)
-  -> Core.ForceHandle  -- ^ ForceXGrid handle (needed if updating X)
-  -> Maybe Core.ForceHandle  -- ^ ForceYGrid handle (needed if updating Y)
   -> Simulation row linkRow
   -> Effect Unit
-updateGridXYAndReinit mXFn mYFn forceXHandle mForceYHandle sim = do
-  -- Update gridX if function provided
+updateGridXYAndReinit mXFn mYFn sim = do
   for_ mXFn \xFn ->
     updateGridXWithFn_ xFn sim.nodes
-
-  -- Update gridY if function provided
   for_ mYFn \yFn ->
     updateGridYWithFn_ yFn sim.nodes
-
-  -- Re-initialize forces so they pick up new gridX/gridY values
-  currentNodes <- Ref.read sim.nodes
-
-  -- Always re-initialize X force (even if no X update, it's cheap)
-  _ <- Core.initializeForce forceXHandle currentNodes
-
-  -- Re-initialize Y force if handle provided
-  for_ mForceYHandle \forceYHandle ->
-    void $ Core.initializeForce forceYHandle currentNodes
-
-  -- Reheat to start the animation
+  reinitializeForces sim
   reheat sim
 
 -- =============================================================================
@@ -745,7 +700,7 @@ updateGridXYAndReinit mXFn mYFn forceXHandle mForceYHandle sim = do
 
 -- | Attach simulation-aware drag behavior to node elements
 -- |
--- | This sets up D3 drag handlers that:
+-- | This sets up pointer handlers (native Pointer Events, no D3) that:
 -- | 1. Reheat the simulation on drag start
 -- | 2. Update fx/fy (fixed position) during drag
 -- | 3. Clear fx/fy on drag end (release node)

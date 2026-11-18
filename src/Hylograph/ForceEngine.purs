@@ -1,9 +1,10 @@
 -- | Pure Force Engine
 -- |
--- | A clean, debuggable force simulation engine.
--- | Uses D3's force calculation algorithms but manages the simulation ourselves.
+-- | A clean, debuggable force simulation engine. The forces are PureScript
+-- | (`hylograph-forces-pure`: d3-force's, bit for bit, and more); the loop is
+-- | this library's own. There is no D3 in it.
 -- |
--- | Key benefits over d3.forceSimulation:
+-- | What that buys over d3.forceSimulation:
 -- | - Full control over when forces run
 -- | - Predictable, debuggable behavior
 -- | - Clean PureScript types
@@ -91,6 +92,7 @@ import Hylograph.ForceEngine.Events
 
 import Hylograph.ForceEngine.Core
   ( ForceHandle
+  , ForceRecipe(..)
   , createManyBody
   , createCollide
   , createLink
@@ -100,15 +102,15 @@ import Hylograph.ForceEngine.Core
   , createRadial
   , initializeNodes
   , initializeForce
-  , initializeLinkForce
+  , reinitializeForce
   , applyForce
   , applyForces
   , integratePositions
+  , constrain
   , decayAlpha
   , simulationTick
   , logNodes
   ) as Core
-
 import Hylograph.ForceEngine.Links
   ( swizzleLinks
   , swizzleLinksByIndex

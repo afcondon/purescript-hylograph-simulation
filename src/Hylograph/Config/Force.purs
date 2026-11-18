@@ -1,7 +1,7 @@
 -- | Force Configuration Module
 -- |
 -- | This module defines immutable force configurations that are separate from
--- | the mutable d3-force JavaScript handles. This separation allows for:
+-- | the mutable force handles. This separation allows for:
 -- | - Predictable scene transitions
 -- | - Easy parameter resets
 -- | - Better type safety
@@ -69,7 +69,7 @@ data ForceFilter = ForceFilter {
 instance Show ForceFilter where
   show (ForceFilter f) = "filter(" <> f.description <> ")"
 
--- | All possible force types in d3-force
+-- | The seven kinds of force d3-force has
 data ForceType
   = ForceManyBody
   | ForceCenter

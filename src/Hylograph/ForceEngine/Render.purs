@@ -20,8 +20,8 @@
 -- | updateLinkPositions linksGroup
 -- | ```
 -- |
--- | The FFI updates use D3's `.attr()` method directly on selections,
--- | which is O(n) DOM updates with no data join overhead.
+-- | The FFI updates set attributes straight from each element's bound datum:
+-- | O(n) DOM updates with no data join, and no D3.
 module Hylograph.ForceEngine.Render
   ( -- * Type-safe Group IDs
     GroupId(..)
@@ -38,6 +38,7 @@ import Prelude
 
 import Data.Newtype (class Newtype, unwrap)
 import Effect (Effect)
+import Web.DOM.Element (Element)
 
 -- =============================================================================
 -- Type-safe Group IDs
@@ -73,7 +74,7 @@ foreign import updateCirclePositions_ :: String -> Effect Unit
 foreign import updateLinkPositions_ :: String -> Effect Unit
 foreign import updateGroupPositions_ :: String -> Effect Unit
 foreign import updateTreeLinkPaths_ :: String -> Effect Unit
-foreign import updatePositions_ :: forall a. String -> (a -> Effect Unit) -> Effect Unit
+foreign import updatePositions_ :: String -> (Array Element -> Effect Unit) -> Effect Unit
 
 -- =============================================================================
 -- Public API (type-safe GroupId)
@@ -147,18 +148,8 @@ updateGroupPositions gid = updateGroupPositions_ (unwrap gid)
 updateTreeLinkPaths :: GroupId -> Effect Unit
 updateTreeLinkPaths gid = updateTreeLinkPaths_ (unwrap gid)
 
--- | Generic position update with custom attribute setter.
--- |
--- | The setter receives the D3 selection and should call `.attr()` methods.
--- |
--- | Example (custom node representation):
--- | ```purescript
--- | rectsGroup :: GroupId
--- | rectsGroup = GroupId "#node-rects"
--- |
--- | updatePositions rectsGroup \sel -> do
--- |   sel # setAttr "x" (_.x - 10.0)  -- center rect
--- |   sel # setAttr "y" (_.y - 10.0)
--- | ```
-updatePositions :: forall a. GroupId -> (a -> Effect Unit) -> Effect Unit
+-- | Generic position update with a custom setter, which is given every
+-- | element under the group; each element's bound datum is its `__data__`.
+-- | (Until 2026-11-18 the setter was handed a D3 selection.)
+updatePositions :: GroupId -> (Array Element -> Effect Unit) -> Effect Unit
 updatePositions gid = updatePositions_ (unwrap gid)

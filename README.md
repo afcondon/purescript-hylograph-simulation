@@ -1,6 +1,6 @@
 # purescript-hylograph-simulation
 
-Force-directed graph simulation: the library's own simulation loop over a replaceable force kernel (`d3-force`'s force functions by default, or Rust/WASM).
+Force-directed graph simulation: the library's own simulation loop over a replaceable force kernel. The default kernel is PureScript ([hylograph-forces-pure](https://github.com/afcondon/purescript-hylograph-forces-pure): d3-force's forces, and six more); a Rust/WASM kernel is the fast path. There is no D3 in this library.
 
 Live interactive demo can be seen as part of the [suite of Hylograph library demos](https://afcondon.github.io/purescript-hylograph-demos/). Click the screenshot below for the **Force Playground**.
 
@@ -24,7 +24,7 @@ import Hylograph.Simulation
 main :: Effect Unit
 main = do
   { handle, events } <- runSimulation
-    { engine: D3
+    { engine: Pure
     , setup: setup "physics"
         [ manyBody "charge" # withStrength (static (-50.0))
         , center "center" # withX (static 200.0) # withY (static 150.0)
@@ -57,43 +57,84 @@ main = do
 spago install hylograph-simulation
 ```
 
-## What comes from D3, and what does not
+In this checkout the default kernel is a path dependency
+(`../purescript-hylograph-forces-pure`, unpublished), so a workspace that
+takes this library by path has to list `hylograph-forces-pure` in its own
+`extraPackages` too.
 
-The force *calculations* are D3's. `ForceEngine/Core.js` imports the force
-functions from `d3-force` (`forceManyBody`, `forceCollide`, `forceLink`,
-`forceCenter`, `forceX`, `forceY`, `forceRadial`), plus `select` and `pointer`
-from `d3-selection` and `drag` from `d3-drag` for dragging nodes.
+## No D3
 
-The *simulation* is not D3's. There is no `d3.forceSimulation`, no D3 timer and
-no D3 lifecycle: the tick loop, alpha decay, velocity integration and ownership
-of the node array are this library's. That is what makes the general update
-pattern work on a running simulation (`handle.updateData` adds and removes
-nodes and links and reheats it), which D3's own simulation wrapper makes hard
-because it owns the data.
+Until 2026-11-18 the force calculations here were d3-force's functions and
+dragging went through d3-drag. Neither is used now, and the library has no
+npm dependencies.
+
+The forces are `hylograph-forces-pure`: d3-force 3.0.0's seven forces ported
+to PureScript and held to d3-force bit for bit by a differential test (same
+nodes, same parameters, every value of every node compared after every tick),
+plus the forces the Rust kernel added (towards, rectangle collision,
+containment, cohesion, group-scoped many-body, directional links), held bit
+for bit to that kernel built at 64 bits. See that package's README for the
+tables and the timings.
+
+The *simulation* was never D3's: the tick loop, alpha decay, velocity
+integration and ownership of the node array are this library's. That is what
+makes the general update pattern work on a running simulation
+(`handle.updateData` adds and removes nodes and links and reheats it).
+
+Dragging uses native Pointer Events: `attachDrag` is
+`Hylograph.Interaction.Pointer.attachSimulationDrag` from hylograph-selection,
+and the pinning and group drags are a small amount of this library's own
+JavaScript.
+
+Three things changed with the kernel:
+
+- **Layouts repeat.** Coincident nodes are separated by a seeded generator,
+  one per simulation, where the old engine used `Math.random`. The same
+  nodes, links and setup give the same positions on every run.
+- **A node with no position starts on d3's phyllotaxis spiral**, and a pinned
+  node starts on its pin (d3's `initializeNodes`). The old engine put an
+  unpositioned node somewhere at random.
+- **A link naming a node that is not there is an error** (`node not found:
+  <id>`, d3's words): `applySetup` throws and `tryApplySetup` returns it as a
+  `Left`. On the WASM engine such a link is still dropped with a warning.
 
 A second kernel, written in Rust and compiled to WebAssembly, sits behind the
 same `Engine` switch (`engine: WASM`, after `initWASM` has loaded the module;
-bindings in `Hylograph.ForceEngine.WASM`) and uses no D3 force code. It is
-there to show the kernel is replaceable; it is less exercised than the D3 one.
+bindings in `Hylograph.ForceEngine.WASM`). One `Setup` drives both, every
+force included, and `test/engine-parity.mjs` holds them to each other (to
+float width one tick from identical state: the shipped kernel is f32).
 
-The same two kernels are also packaged separately, as
+`engine: D3` still compiles and now means `Pure`.
+
+### How fast
+
+Many-body, links and centring through this library's own loop, milliseconds
+per tick, Node 22 on an M1 Pro that was busy with other work (`node
+test/timing.mjs`; each block of ten ticks counted at its fastest over three
+interleaved runs):
+
+| Nodes | default engine (PureScript, stock `purs`) | WASM engine |
+|---|---|---|
+| 100 | 0.19 | 0.04 |
+| 1,000 | 2.9 | 0.87 |
+| 10,000 | 46 | 12.6 |
+
+The WASM engine is 3 to 4 times faster. The default engine is about where
+d3-force's own functions are in the same loop (hylograph-forces-pure's README
+has that comparison, and the figures under `purs-backend-es`, which are
+about a third lower). Not measured in a browser.
+
+The D3 kernel that this library used to carry is still available, packaged
+separately as
 [hylograph-d3-kernel](https://github.com/afcondon/purescript-hylograph-d3-kernel)
-and [hylograph-wasm-kernel](https://github.com/afcondon/purescript-hylograph-wasm-kernel)
-over `hylograph-simulation-core`. This package does not depend on them; it
-carries its own copy of both sets of bindings.
-
-### npm dependencies
-
-The PureScript registry cannot declare npm dependencies, so a project that
-bundles this library has to install them itself:
-
-```bash
-npm install d3-force d3-selection d3-drag
-```
+over `hylograph-simulation-core`, as is
+[hylograph-wasm-kernel](https://github.com/afcondon/purescript-hylograph-wasm-kernel).
+This package does not depend on either.
 
 ## Features
 
-- **Replaceable kernel** - Same API over `d3-force`'s force functions or a Rust/WASM kernel
+- **Replaceable kernel** - Same API over a PureScript kernel or a Rust/WASM kernel
+- **Repeatable** - The same nodes, links and setup give the same layout every time
 - **Framework Agnostic** - Works with Halogen, React, or vanilla JS
 - **Declarative Forces** - Compose forces with a fluent builder API
 - **Event Subscription** - React to Tick, Started, Stopped, Completed events
@@ -142,6 +183,14 @@ useEffect(() => {
 | `positionX` | Pulls nodes toward an X position |
 | `positionY` | Pulls nodes toward a Y position |
 | `radial` | Pulls nodes toward a circle |
+| `towards` | Pulls each node toward its own target point |
+| `rectCollide` | Prevents rectangles (labels) overlapping |
+| `contain` | Keeps nodes inside a rectangle, circle or convex polygon |
+| `cohesion` | Pulls each node toward the centroid of its group |
+| `directional` | Keeps each link's target a gap beyond its source along an axis |
+
+`manyBody` can be scoped to pairs within a group or between groups, and
+`collide` can take a filter and a strength that follows alpha.
 
 ## Modules
 
@@ -149,7 +198,22 @@ useEffect(() => {
 - `Hylograph.Simulation.Emitter` - Framework-agnostic event system
 - `Hylograph.ForceEngine.Setup` - Declarative force configuration
 - `Hylograph.ForceEngine.Simulation` - Low-level simulation control (the library's own loop)
+- `Hylograph.ForceEngine.Core` - Force recipes and handles, the tick's parts, dragging
 - `Hylograph.ForceEngine.WASM` - WASM engine integration
+
+## Tests
+
+```bash
+spago test                      # the pure computations
+node test/engine-parity.mjs     # one Setup through both engines, compared
+node test/wasm-engine-api.mjs   # the WASM engine's PureScript API
+node test/browser-check.mjs     # headless Chrome: the Force Playground demo, and the three drags
+node test/timing.mjs            # ms per tick on each engine
+```
+
+The last four read the compiled `output/`, the shipped kernel in
+`purescript-hylograph-showcases/wasm-force-demo/pkg`, and (the browser check)
+the bundled demo in `purescript-hylograph-demos/simulation`.
 
 ## Part of Hylograph
 

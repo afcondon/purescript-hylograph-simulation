@@ -1,6 +1,6 @@
 -- | Simulation Setup Configuration Module
 -- |
--- | A SimulationSetup represents a complete D3 simulation configuration:
+-- | A SimulationSetup represents a complete simulation configuration:
 -- | - Which forces are active
 -- | - Simulation parameters (alpha, decay rates, etc.)
 -- |

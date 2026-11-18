@@ -1,11 +1,13 @@
 workspace:
   packageSet:
     registry: 80.8.0
-  extraPackages: {}
+  extraPackages:
+    hylograph-forces-pure:
+      path: ../purescript-hylograph-forces-pure
 
 package:
   name: hylograph-simulation
-  description: Force-directed graph simulation for PureScript D3
+  description: Force-directed graph simulation in PureScript, with an optional Rust/WASM kernel
   publish:
     version: 0.6.0
     license: MIT
@@ -17,9 +19,11 @@ package:
     - arrays: ">=7.3.0 <8.0.0"
     - console: ">=6.1.0 <7.0.0"
     - effect: ">=4.0.0 <5.0.0"
+    - either: ">=6.1.0 <7.0.0"
     - exceptions: ">=6.1.0 <7.0.0"
     - foldable-traversable: ">=6.0.0 <7.0.0"
     - foreign-object: ">=4.1.0 <5.0.0"
+    - hylograph-forces-pure: "*"
     - hylograph-selection: ">=0.5.0 <0.6.0"
     - hylograph-transitions: ">=0.1.0 <0.2.0"
     - integers: ">=6.0.0 <7.0.0"

@@ -1,14 +1,35 @@
--- | Pure Force Engine Core
+-- | Force Engine Core
 -- |
--- | This module provides the core force simulation loop.
--- | We use D3's force calculation algorithms but manage the simulation ourselves.
+-- | The simulation loop's parts: forces, the position update, cooling, the
+-- | animation frame and dragging.
 -- |
--- | Key principle: Forces are just functions that mutate vx/vy on nodes.
--- | We control when they run and how alpha decays.
+-- | The forces are `hylograph-forces-pure`: d3-force's seven and the Rust
+-- | kernel's additions, in PureScript, with no D3 anywhere. A force is made in
+-- | two steps, because a simulation is usually described before its nodes
+-- | exist:
+-- |
+-- | 1. a `ForceRecipe` says what the force is (`createManyBody config`, or
+-- |    `Hylograph.ForceEngine.Setup.recipe` for anything a `Setup` can say);
+-- | 2. `initializeForce` gives it the nodes and links and returns a
+-- |    `ForceHandle`, which `applyForce` applies each tick.
+-- |
+-- | Per-node and per-link values are read when the force is initialized, so
+-- | a force has to be initialized again (`reinitializeForce`) when the nodes,
+-- | the links, or anything those values are computed from have changed.
+-- |
+-- | Coincident nodes are separated by a seeded generator (`RandomSource`),
+-- | one per simulation, so the same nodes, links and forces give the same
+-- | layout every time.
 module Hylograph.ForceEngine.Core
-  ( -- * Force Handles (opaque)
-    ForceHandle
-    -- * Force Creation
+  ( -- * Nodes and links as the forces see them
+    Node
+  , NodeRow
+  , Links
+    -- * Forces
+  , ForceRecipe(..)
+  , ForceHandle
+  , RandomSource
+  , randomSource
   , createManyBody
   , createCollide
   , createLink
@@ -16,28 +37,18 @@ module Hylograph.ForceEngine.Core
   , createForceX
   , createForceY
   , createRadial
-    -- * Filtered/Dynamic Forces
-  , createManyBodyFiltered
-  , createRadialFiltered
-  , createCollideDynamic
-  , createForceXDynamic
-  , createForceYDynamic
-  , createLinkDynamic
-  , createLinkPerLink
-  , createForceXFiltered
-  , createForceYFiltered
-    -- * Optimized Grid Forces (no FFI callbacks)
   , createForceXGrid
   , createForceYGrid
   , createCollideGrid
     -- * Initialization
   , initializeNodes
   , initializeForce
-  , initializeLinkForce
+  , reinitializeForce
     -- * Simulation Step
   , applyForce
   , applyForces
   , integratePositions
+  , constrain
   , decayAlpha
   , simulationTick
     -- * Animation
@@ -56,238 +67,235 @@ module Hylograph.ForceEngine.Core
 
 import Prelude
 
+import Data.Either (Either(..))
 import Data.Traversable (for_)
 import Effect (Effect)
-import Hylograph.ForceEngine.Types (ManyBodyConfig, CollideConfig, LinkConfig, CenterConfig, ForceXConfig, ForceYConfig, RadialConfig, ManyBodyFilteredConfig, RadialFilteredConfig, CollideDynamicConfig, ForceXDynamicConfig, ForceYDynamicConfig, LinkDynamicConfig)
+import Hylograph.ForceEngine.Types (ManyBodyConfig, CollideConfig, LinkConfig, CenterConfig, ForceXConfig, ForceYConfig, RadialConfig)
+import Hylograph.Forces.Pure as Pure
+import Hylograph.Forces.Pure.Group (ungrouped)
+import Hylograph.Forces.Pure.Link as PureLink
+import Hylograph.Forces.Pure.ManyBody (everyPair)
+import Hylograph.Forces.Pure.Node as PureNode
+import Hylograph.Forces.Pure.Random as Random
+import Hylograph.Forces.Pure.Tick as Tick
+import Hylograph.Interaction.Pointer as Pointer
 import Web.DOM.Element (Element)
 
 -- =============================================================================
--- Foreign Imports
+-- Nodes and links
 -- =============================================================================
 
--- Force handles are opaque JavaScript objects
-foreign import data ForceHandle :: Type
+-- | What a node has beyond position and velocity: an id, and the pins.
+-- | `Record (NodeRow row)` plus x, y, vx, vy is
+-- | `Hylograph.ForceEngine.Simulation.SimulationNode row`.
+type NodeRow row = PureNode.Pinnable (id :: Int | row)
 
--- Force creation
-foreign import createManyBody_ :: ManyBodyConfig -> ForceHandle
-foreign import createCollide_ :: CollideConfig -> ForceHandle
-foreign import createLink_ :: LinkConfig -> ForceHandle
-foreign import createCenter_ :: CenterConfig -> ForceHandle
-foreign import createForceX_ :: ForceXConfig -> ForceHandle
-foreign import createForceY_ :: ForceYConfig -> ForceHandle
-foreign import createRadial_ :: RadialConfig -> ForceHandle
+-- | A simulation node. The same type as `SimulationNode row`.
+type Node row = PureNode.Node (NodeRow row)
 
--- Filtered/Dynamic force creation
-foreign import createManyBodyFiltered_ :: forall node. ManyBodyFilteredConfig node -> ForceHandle
-foreign import createRadialFiltered_ :: forall node. RadialFilteredConfig node -> ForceHandle
-foreign import createCollideDynamic_ :: forall node. CollideDynamicConfig node -> ForceHandle
-foreign import createForceXDynamic_ :: forall node. ForceXDynamicConfig node -> ForceHandle
-foreign import createForceYDynamic_ :: forall node. ForceYDynamicConfig node -> ForceHandle
-foreign import createLinkDynamic_ :: forall link. LinkDynamicConfig link -> ForceHandle
-foreign import createForceXFiltered_ :: forall node. { xAccessor :: node -> Number, strength :: Number, filter :: node -> Boolean } -> ForceHandle
-foreign import createForceYFiltered_ :: forall node. { yAccessor :: node -> Number, strength :: Number, filter :: node -> Boolean } -> ForceHandle
-foreign import createLinkPerLink_ :: { distances :: Array Number, strengths :: Array Number, iterations :: Int } -> ForceHandle
+-- | Links, naming their nodes by id.
+type Links = Array { source :: Int, target :: Int }
 
--- Optimized Grid force creation (no PureScript callbacks - reads node properties directly)
-foreign import createForceXGrid_ :: Number -> ForceHandle
-foreign import createForceYGrid_ :: Number -> ForceHandle
-foreign import createCollideGrid_ :: Number -> Number -> Int -> ForceHandle
+-- =============================================================================
+-- Forces
+-- =============================================================================
 
+-- | The seeded generator that separates coincident nodes: d3's own, started
+-- | where d3 starts it.
+type RandomSource = Random.Source
+
+-- | A fresh generator, for a new simulation.
+randomSource :: Effect RandomSource
+randomSource = Random.lcg
+
+-- | What a force is, before it has met its nodes: given the simulation's
+-- | generator, nodes and links, the force itself, or why it cannot be made
+-- | (a link naming a node that is not there: `node not found: <id>`).
+newtype ForceRecipe row = ForceRecipe
+  (RandomSource -> Array (Node row) -> Links -> Either String (Pure.Force (NodeRow row)))
+
+-- | A force that has its nodes, and the recipe it was made from, so that it
+-- | can be made again when they change.
+newtype ForceHandle row = ForceHandle
+  { recipe :: ForceRecipe row
+  , force :: Pure.Force (NodeRow row)
+  }
+
+-- | A many-body (charge) force with one strength for every node.
+createManyBody :: forall row. ManyBodyConfig -> ForceRecipe row
+createManyBody config = ForceRecipe \random nodes _ ->
+  Right $ Pure.manyBody
+    { strength: \_ -> config.strength
+    , theta: config.theta
+    , distanceMin: config.distanceMin
+    , distanceMax: config.distanceMax
+    , scope: everyPair
+    , group: \_ -> ungrouped
+    }
+    random
+    nodes
+
+-- | A collision force with one radius for every node.
+createCollide :: forall row. CollideConfig -> ForceRecipe row
+createCollide config = ForceRecipe \random nodes _ ->
+  Right $ Pure.collide
+    { radius: \_ -> config.radius
+    , strength: config.strength
+    , iterations: config.iterations
+    , include: \_ -> true
+    , alphaScaled: false
+    }
+    random
+    nodes
+
+-- | A link force with one distance and one strength for every link.
+createLink :: forall row. LinkConfig -> ForceRecipe row
+createLink config = ForceRecipe \random nodes links ->
+  Pure.linkById _.id
+    { distance: \_ -> config.distance
+    , strength: PureLink.strengthPerLink \_ -> config.strength
+    , iterations: config.iterations
+    }
+    random
+    nodes
+    links
+
+-- | A centering force.
+createCenter :: forall row. CenterConfig -> ForceRecipe row
+createCenter config = ForceRecipe \_ nodes _ -> Right $ Pure.center config nodes
+
+-- | A force pulling every node toward one x.
+createForceX :: forall row. ForceXConfig -> ForceRecipe row
+createForceX config = ForceRecipe \_ nodes _ ->
+  Right $ Pure.positionX { target: \_ -> config.x, strength: \_ -> config.strength } nodes
+
+-- | A force pulling every node toward one y.
+createForceY :: forall row. ForceYConfig -> ForceRecipe row
+createForceY config = ForceRecipe \_ nodes _ ->
+  Right $ Pure.positionY { target: \_ -> config.y, strength: \_ -> config.strength } nodes
+
+-- | A force pulling every node toward one circle.
+createRadial :: forall row. RadialConfig -> ForceRecipe row
+createRadial config = ForceRecipe \_ nodes _ ->
+  Right $ Pure.radial
+    { radius: \_ -> config.radius, strength: \_ -> config.strength, x: config.x, y: config.y }
+    nodes
+
+-- | A force pulling each node toward its own `gridX`, read off the node when
+-- | the force is initialized.
+createForceXGrid :: forall row. Number -> ForceRecipe (gridX :: Number | row)
+createForceXGrid strength = ForceRecipe \_ nodes _ ->
+  Right $ Pure.positionX { target: _.gridX, strength: \_ -> strength } nodes
+
+-- | A force pulling each node toward its own `gridY`.
+createForceYGrid :: forall row. Number -> ForceRecipe (gridY :: Number | row)
+createForceYGrid strength = ForceRecipe \_ nodes _ ->
+  Right $ Pure.positionY { target: _.gridY, strength: \_ -> strength } nodes
+
+-- | A collision force whose radius is each node's own `r` plus a padding.
+-- | Arguments: padding, strength, iterations.
+createCollideGrid :: forall row. Number -> Number -> Int -> ForceRecipe (r :: Number | row)
+createCollideGrid padding strength iterations = ForceRecipe \random nodes _ ->
+  Right $ Pure.collide
+    { radius: \node -> node.r + padding
+    , strength
+    , iterations
+    , include: \_ -> true
+    , alphaScaled: false
+    }
+    random
+    nodes
+
+-- =============================================================================
 -- Initialization
-foreign import initializeNodes_ :: forall r. Array { | r } -> Effect Unit
-foreign import initializeForce_ :: forall r. ForceHandle -> Array { | r } -> Effect ForceHandle
-foreign import initializeLinkForce_ :: forall nodeRow linkRow. ForceHandle -> Array { | nodeRow } -> Array { | linkRow } -> Effect ForceHandle
-
--- Force application
-foreign import applyForce_ :: ForceHandle -> Number -> Effect Unit
-
--- Position integration
-foreign import integratePositions_ :: forall r. Array { | r } -> Number -> Effect Unit
-
--- Alpha decay (pure calculation)
-foreign import decayAlpha_ :: Number -> Number -> Number -> Number -> Number
-
--- Animation
-foreign import requestAnimationFrame_ :: (Number -> Effect Unit) -> Effect (Effect Unit)
-
--- Debug
-foreign import logNodes_ :: forall r. String -> Array { | r } -> Effect Unit
-
--- =============================================================================
--- Force Creation (Pure)
 -- =============================================================================
 
--- | Create a many-body (charge) force
-createManyBody :: ManyBodyConfig -> ForceHandle
-createManyBody = createManyBody_
+-- | d3's `initializeNodes`: give every node its index, put a pinned node on
+-- | its pin, stop a node with no velocity, and give a node with no position
+-- | a place on d3's phyllotaxis spiral. (Until 2026-11-18 a node with no
+-- | position was put somewhere at random.)
+initializeNodes :: forall row. Array (Node row) -> Effect Unit
+initializeNodes = Tick.initializeNodes
 
--- | Create a collision force
-createCollide :: CollideConfig -> ForceHandle
-createCollide = createCollide_
+-- | Make a force for these nodes and links.
+initializeForce
+  :: forall row
+   . RandomSource
+  -> Array (Node row)
+  -> Links
+  -> ForceRecipe row
+  -> Either String (ForceHandle row)
+initializeForce random nodes links recipe = case recipe of
+  ForceRecipe make -> map (\force -> ForceHandle { recipe, force }) (make random nodes links)
 
--- | Create a link force
-createLink :: LinkConfig -> ForceHandle
-createLink = createLink_
-
--- | Create a centering force
-createCenter :: CenterConfig -> ForceHandle
-createCenter = createCenter_
-
--- | Create an X positioning force
-createForceX :: ForceXConfig -> ForceHandle
-createForceX = createForceX_
-
--- | Create a Y positioning force
-createForceY :: ForceYConfig -> ForceHandle
-createForceY = createForceY_
-
--- | Create a radial force
-createRadial :: RadialConfig -> ForceHandle
-createRadial = createRadial_
-
--- =============================================================================
--- Filtered/Dynamic Force Creation (Pure)
--- =============================================================================
-
--- | Create a many-body force that only applies to nodes matching a predicate
--- | Useful for applying charge only to certain node types (e.g., tree parents)
-createManyBodyFiltered :: forall node. ManyBodyFilteredConfig node -> ForceHandle
-createManyBodyFiltered = createManyBodyFiltered_
-
--- | Create a radial force that only applies to nodes matching a predicate
-createRadialFiltered :: forall node. RadialFilteredConfig node -> ForceHandle
-createRadialFiltered = createRadialFiltered_
-
--- | Create a collision force with dynamic radius per-node
--- | The radiusAccessor function is called for each node to determine collision radius
--- | Example: `{ radiusAccessor: \n -> n.r + 5.0, strength: 1.0, iterations: 1 }`
-createCollideDynamic :: forall node. CollideDynamicConfig node -> ForceHandle
-createCollideDynamic = createCollideDynamic_
-
--- | Create an X positioning force with dynamic target per-node
--- | The xAccessor function is called for each node to determine target X
--- | Useful for clustering (e.g., modules toward their parent package's X)
-createForceXDynamic :: forall node. ForceXDynamicConfig node -> ForceHandle
-createForceXDynamic = createForceXDynamic_
-
--- | Create a Y positioning force with dynamic target per-node
-createForceYDynamic :: forall node. ForceYDynamicConfig node -> ForceHandle
-createForceYDynamic = createForceYDynamic_
-
--- | Create a link force with dynamic strength per-link
--- | The strengthAccessor function is called for each link to determine strength
--- | Useful for encoding link weight as force strength
--- | Example: `{ distance: 30.0, strengthAccessor: \link -> link.weight, iterations: 1 }`
-createLinkDynamic :: forall link. LinkDynamicConfig link -> ForceHandle
-createLinkDynamic = createLinkDynamic_
-
--- | Create a link force with one distance and one strength per link, as
--- | arrays in link order.
-createLinkPerLink :: { distances :: Array Number, strengths :: Array Number, iterations :: Int } -> ForceHandle
-createLinkPerLink = createLinkPerLink_
-
--- | Create an X positioning force with a per-node target, applied only to
--- | nodes the filter accepts.
-createForceXFiltered :: forall node. { xAccessor :: node -> Number, strength :: Number, filter :: node -> Boolean } -> ForceHandle
-createForceXFiltered = createForceXFiltered_
-
--- | Create a Y positioning force with a per-node target, applied only to
--- | nodes the filter accepts.
-createForceYFiltered :: forall node. { yAccessor :: node -> Number, strength :: Number, filter :: node -> Boolean } -> ForceHandle
-createForceYFiltered = createForceYFiltered_
-
--- =============================================================================
--- Optimized Grid Forces (no FFI callbacks)
--- =============================================================================
-
--- | Create an X positioning force that reads node.gridX directly
--- | Much faster than createForceXDynamic because it avoids FFI callbacks.
--- | Nodes must have a `gridX :: Number` field.
-createForceXGrid :: Number -> ForceHandle
-createForceXGrid = createForceXGrid_
-
--- | Create a Y positioning force that reads node.gridY directly
--- | Much faster than createForceYDynamic because it avoids FFI callbacks.
--- | Nodes must have a `gridY :: Number` field.
-createForceYGrid :: Number -> ForceHandle
-createForceYGrid = createForceYGrid_
-
--- | Create a collision force that reads node.r directly
--- | Much faster than createCollideDynamic because it avoids FFI callbacks.
--- | Nodes must have an `r :: Number` field (radius).
--- | Parameters: padding, strength, iterations
-createCollideGrid :: Number -> Number -> Int -> ForceHandle
-createCollideGrid = createCollideGrid_
-
--- =============================================================================
--- Initialization (Effectful)
--- =============================================================================
-
--- | Initialize nodes with indices and default velocities
--- | This mutates the nodes array to add index, vx, vy if missing
-initializeNodes :: forall r. Array { | r } -> Effect Unit
-initializeNodes = initializeNodes_
-
--- | Initialize a force with nodes
--- | Must be called before applying the force
-initializeForce :: forall r. ForceHandle -> Array { | r } -> Effect ForceHandle
-initializeForce = initializeForce_
-
--- | Initialize a link force with nodes and links
--- | Link forces need both nodes and links
-initializeLinkForce :: forall nodeRow linkRow. ForceHandle -> Array { | nodeRow } -> Array { | linkRow } -> Effect ForceHandle
-initializeLinkForce = initializeLinkForce_
+-- | Make a force again, from the recipe it was first made from, for nodes
+-- | or links that have changed.
+reinitializeForce
+  :: forall row
+   . RandomSource
+  -> Array (Node row)
+  -> Links
+  -> ForceHandle row
+  -> Either String (ForceHandle row)
+reinitializeForce random nodes links handle = case handle of
+  ForceHandle made -> initializeForce random nodes links made.recipe
 
 -- =============================================================================
 -- Simulation Step
 -- =============================================================================
 
--- | Apply a single force
--- | This mutates vx/vy on the nodes the force was initialized with
-applyForce :: ForceHandle -> Number -> Effect Unit
-applyForce = applyForce_
+-- | Apply a single force: it changes the velocities (or, for centering, the
+-- | positions) of the nodes it was initialized with.
+applyForce :: forall row. ForceHandle row -> Number -> Effect Unit
+applyForce handle alpha = case handle of
+  ForceHandle made -> Pure.applyForce alpha made.force
 
--- | Apply multiple forces in sequence
-applyForces :: Array ForceHandle -> Number -> Effect Unit
-applyForces forces alpha = for_ forces \f -> applyForce f alpha
+-- | Apply forces in order, each seeing what the ones before it did.
+applyForces :: forall row. Array (ForceHandle row) -> Number -> Effect Unit
+applyForces forces alpha = for_ forces \force -> applyForce force alpha
 
--- | Integrate positions: apply velocity decay and update positions
--- | Call this once per tick after all forces have been applied
-integratePositions :: forall r. Array { | r } -> Number -> Effect Unit
-integratePositions = integratePositions_
+-- | Move the nodes: each velocity is multiplied by `velocityRetention` and
+-- | added to the position, and a pinned coordinate goes to its pin and stops.
+-- | Call once per tick, after the forces.
+integratePositions :: forall row. Array (Node row) -> Number -> Effect Unit
+integratePositions nodes velocityRetention = Tick.integrate velocityRetention nodes
 
--- | Calculate new alpha value (the "cooling" step)
--- | Returns 0 if alpha falls below alphaMin
+-- | After the nodes have moved: every hard containment clamps its nodes into
+-- | their regions, and then pinned coordinates are put back (a pin beats a
+-- | region). Nothing where no force is a hard containment.
+constrain :: forall row. Array (ForceHandle row) -> Array (Node row) -> Effect Unit
+constrain forces nodes = Pure.constrain (map (\(ForceHandle made) -> made.force) forces) nodes
+
+-- | Cool: alpha moves toward `alphaTarget` by `alphaDecay` of the way, and
+-- | is zero once it has fallen below `alphaMin`, which is how the loop knows
+-- | to stop. Arguments: alpha, alphaMin, alphaDecay, alphaTarget.
 decayAlpha :: Number -> Number -> Number -> Number -> Number
-decayAlpha = decayAlpha_
+decayAlpha alpha alphaMin alphaDecay alphaTarget = Tick.decay { alphaMin, alphaDecay, alphaTarget } alpha
 
--- | Complete simulation tick:
--- | 1. Apply all forces
--- | 2. Integrate positions
--- | 3. Return new alpha
-simulationTick :: forall r.
-  { forces :: Array ForceHandle
-  , nodes :: Array { | r }
-  , alpha :: Number
-  , alphaMin :: Number
-  , alphaDecay :: Number
-  , alphaTarget :: Number
-  , velocityRetention :: Number
-  }
-  -> Effect Number  -- Returns new alpha
+-- | A complete tick: apply the forces at the current alpha, move the nodes,
+-- | apply hard containment, and return the cooled alpha.
+simulationTick
+  :: forall row
+   . { forces :: Array (ForceHandle row)
+     , nodes :: Array (Node row)
+     , alpha :: Number
+     , alphaMin :: Number
+     , alphaDecay :: Number
+     , alphaTarget :: Number
+     , velocityRetention :: Number
+     }
+  -> Effect Number
 simulationTick params = do
-  -- Apply all forces
   applyForces params.forces params.alpha
-
-  -- Integrate positions (velocity decay + position update)
   integratePositions params.nodes params.velocityRetention
-
-  -- Return decayed alpha
+  constrain params.forces params.nodes
   pure $ decayAlpha params.alpha params.alphaMin params.alphaDecay params.alphaTarget
 
 -- =============================================================================
 -- Animation Loop
 -- =============================================================================
+
+foreign import requestAnimationFrame_ :: (Number -> Effect Unit) -> Effect (Effect Unit)
 
 -- | Handle to a running animation (can be used to stop it)
 type AnimationHandle = Effect Unit
@@ -296,7 +304,6 @@ type AnimationHandle = Effect Unit
 -- | The callback receives the current timestamp and should return whether to continue
 startAnimation :: (Number -> Effect Boolean) -> Effect AnimationHandle
 startAnimation onFrame = do
-  -- We store the cancel function in a mutable ref
   cancelRef <- newCancelRef
   let
     loop timestamp = do
@@ -304,13 +311,10 @@ startAnimation onFrame = do
       when continue do
         cancel <- requestAnimationFrame_ loop
         setCancelRef cancelRef cancel
-  -- Start the loop
   cancel <- requestAnimationFrame_ loop
   setCancelRef cancelRef cancel
-  -- Return a function that cancels the animation
   pure $ getCancelRef cancelRef >>= identity
 
--- Foreign helpers for mutable cancel ref
 foreign import newCancelRef :: Effect CancelRef
 foreign import setCancelRef :: CancelRef -> Effect Unit -> Effect Unit
 foreign import getCancelRef :: CancelRef -> Effect (Effect Unit)
@@ -323,55 +327,36 @@ stopAnimation cancel = cancel
 -- =============================================================================
 -- Drag Behavior
 -- =============================================================================
+--
+-- Native Pointer Events throughout; no d3-drag. Each element's `__data__`
+-- is the simulation node it stands for (the convention the selection
+-- library keeps).
 
--- | Attach simulation-aware drag behavior to node elements
--- |
--- | This sets up D3 drag handlers that:
--- | 1. Call the reheat callback on drag start
--- | 2. Update fx/fy (fixed position) during drag
--- | 3. Clear fx/fy on drag end (release node)
--- |
--- | The reheat callback should restart the simulation when dragging begins.
-foreign import attachDragWithReheat_ :: Array Element -> Effect Unit -> Effect Unit
-
--- | Attach drag with a reheat callback
+-- | Drag nodes: reheat when a drag starts, pin the node under the pointer
+-- | while it lasts, release it when it ends. This is
+-- | `Hylograph.Interaction.Pointer.attachSimulationDrag` from
+-- | hylograph-selection, attached to each element.
 attachDragWithReheat :: Array Element -> Effect Unit -> Effect Unit
-attachDragWithReheat = attachDragWithReheat_
+attachDragWithReheat elements reheat =
+  for_ elements \element -> void $ Pointer.attachSimulationDrag element reheat
 
--- | FFI for group drag (uses container for coordinate space)
 foreign import attachGroupDragWithReheat_ :: Array Element -> String -> Effect Unit -> Effect Unit
 
--- | Attach drag to transformed group elements (like bubble packs)
+-- | Drag transformed group elements (like bubble packs)
 -- |
--- | Unlike `attachDragWithReheat`, this version takes a container selector to
--- | get pointer coordinates in the correct coordinate space. Use this when
--- | dragging `<g>` elements that have `transform` attributes.
--- |
--- | Example:
--- | ```purescript
--- | -- For bubble packs inside a zoom group
--- | attachGroupDragWithReheat packElements "#zoom-group" (Sim.reheat sim)
--- | ```
+-- | Unlike `attachDragWithReheat`, this takes a container selector and reads
+-- | the pointer in that container's coordinates. Use it when dragging `<g>`
+-- | elements that have `transform` attributes. The node is the datum of the
+-- | nearest ancestor of what was pressed that has the class `module-pack`.
 attachGroupDragWithReheat :: Array Element -> String -> Effect Unit -> Effect Unit
 attachGroupDragWithReheat = attachGroupDragWithReheat_
 
--- | FFI for pinning drag (toggle pin/unpin on drag)
 foreign import attachPinningDrag_ :: Array Element -> Effect Unit -> Effect Unit
 
--- | Attach drag with toggle-pinning behavior
+-- | Drag with toggle-pinning behavior
 -- |
--- | Unlike `attachDragWithReheat`, this version keeps nodes pinned after drag ends.
--- | - First drag: pins the node where you drop it
--- | - Subsequent drags: if you barely move (< 3px), unpins the node
--- |
--- | This is useful for allowing users to "fix" certain nodes in place while
--- | letting others float freely in the simulation.
--- |
--- | Example:
--- | ```purescript
--- | nodeElements <- getElementsByClassName "node"
--- | attachPinningDrag nodeElements (Sim.reheat sim)
--- | ```
+-- | Unlike `attachDragWithReheat`, a node stays pinned where it is dropped.
+-- | Pressing a pinned node and releasing it within 3px unpins it.
 attachPinningDrag :: Array Element -> Effect Unit -> Effect Unit
 attachPinningDrag = attachPinningDrag_
 
@@ -379,25 +364,17 @@ attachPinningDrag = attachPinningDrag_
 -- DOM Utilities
 -- =============================================================================
 
--- | Foreign import for querySelectorAll
 foreign import querySelectorElements_ :: String -> Effect (Array Element)
 
 -- | Query DOM elements by CSS selector
--- |
--- | Returns all elements matching the given CSS selector.
--- | Useful for getting element references for drag behavior attachment.
--- |
--- | Example:
--- | ```purescript
--- | nodeCircles <- querySelectorElements "#my-graph circle.node"
--- | attachPinningDrag nodeCircles (Sim.reheat sim)
--- | ```
 querySelectorElements :: String -> Effect (Array Element)
 querySelectorElements = querySelectorElements_
 
 -- =============================================================================
 -- Debug
 -- =============================================================================
+
+foreign import logNodes_ :: forall r. String -> Array { | r } -> Effect Unit
 
 -- | Log node positions for debugging
 logNodes :: forall r. String -> Array { | r } -> Effect Unit

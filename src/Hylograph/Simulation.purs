@@ -1,7 +1,8 @@
 -- | Hylograph Force Simulation
 -- |
 -- | High-level API for running force-directed simulations.
--- | Supports both D3.js and WASM physics engines with the same interface.
+-- | Two engines with the same interface: the default, in PureScript
+-- | (`hylograph-forces-pure`, no D3), and the Rust/WASM kernel.
 -- |
 -- | ## Quick Start
 -- |
@@ -12,7 +13,7 @@
 -- | main = do
 -- |   -- Run simulation - returns handle AND event emitter
 -- |   { handle, events } <- runSimulation
--- |     { engine: D3  -- or WASM (same config!)
+-- |     { engine: Pure  -- or WASM (same config!)
 -- |     , setup: setup "physics"
 -- |         [ manyBody "charge" # withStrength (static (-30.0))
 -- |         , center "center"
@@ -84,9 +85,9 @@ import Hylograph.Simulation.Emitter (SimulationEmitter, SimulationEvent(..))
 -- For re-export
 import Hylograph.Simulation.Emitter (SimulationEmitter, SimulationEvent(..), subscribe) as EmitterExports
 
--- D3 Force Engine
-import Hylograph.ForceEngine.Simulation as D3Sim
-import Hylograph.ForceEngine.Setup as D3Setup
+-- The default engine
+import Hylograph.ForceEngine.Simulation as ForceSim
+import Hylograph.ForceEngine.Setup as ForceSetup
 import Hylograph.ForceEngine.Setup
   ( Setup
   , GUPResult
@@ -127,10 +128,18 @@ import Hylograph.ForceEngine.Simulation (SimulationNode) as SimNodeExports
 -- =============================================================================
 
 -- | Position map for interpolation - keyed by node ID (as string)
-type PositionMap = D3Sim.PositionMap
+type PositionMap = ForceSim.PositionMap
 
--- | Physics engine selection
-data Engine = D3 | WASM
+-- | Which engine runs the forces.
+-- |
+-- | - `Pure`: the default. `hylograph-forces-pure`: d3-force's forces bit for
+-- |   bit and the Rust kernel's additions, in PureScript. Nothing to load,
+-- |   no D3.
+-- | - `WASM`: the Rust/WASM kernel, the fast path. Needs `initWASM` first.
+-- | - `D3`: deprecated, and the same as `Pure`. It is kept so that code
+-- |   written when the default engine drove d3-force's functions still
+-- |   compiles; there is no D3 behind it any more.
+data Engine = Pure | WASM | D3
 
 -- | Configuration for running a simulation
 -- |
@@ -141,8 +150,8 @@ data Engine = D3 | WASM
 -- | Use HATS or any other rendering approach to render node positions on each tick.
 type SimulationConfig r =
   { engine :: Engine
-  , setup :: D3Setup.Setup (D3Sim.SimulationNode r)
-  , nodes :: Array (D3Sim.SimulationNode r)
+  , setup :: ForceSetup.Setup (ForceSim.SimulationNode r)
+  , nodes :: Array (ForceSim.SimulationNode r)
   , links :: Array { source :: Int, target :: Int }
   , container :: String  -- CSS selector for SVG container (used for data tracking)
   , alphaMin :: Number   -- Convergence threshold (default: 0.001)
@@ -161,15 +170,15 @@ type SimulationResult r =
 type SimulationHandle r =
   { -- | Update nodes and links with GUP semantics (auto-reheats)
     updateData
-      :: Array (D3Sim.SimulationNode r)
+      :: Array (ForceSim.SimulationNode r)
       -> Array { source :: Int, target :: Int }
-      -> Effect { nodes :: GUPResult (D3Sim.SimulationNode r), links :: GUPLinkResult () }
+      -> Effect { nodes :: GUPResult (ForceSim.SimulationNode r), links :: GUPLinkResult () }
 
     -- | Update force configuration (auto-reheats)
-  , updateSetup :: D3Setup.Setup (D3Sim.SimulationNode r) -> Effect Unit
+  , updateSetup :: ForceSetup.Setup (ForceSim.SimulationNode r) -> Effect Unit
 
     -- | Get current nodes with positions
-  , getNodes :: Effect (Array (D3Sim.SimulationNode r))
+  , getNodes :: Effect (Array (ForceSim.SimulationNode r))
 
     -- | Get current alpha value
   , getAlpha :: Effect Number
@@ -186,7 +195,7 @@ type SimulationHandle r =
     -- | Interpolate node positions between start and target positions.
     -- | Progress should be 0.0 to 1.0 (apply easing before calling).
     -- | Used for animated transitions like quadrant layout.
-  , interpolatePositions :: D3Sim.PositionMap -> D3Sim.PositionMap -> Number -> Effect Unit
+  , interpolatePositions :: ForceSim.PositionMap -> ForceSim.PositionMap -> Number -> Effect Unit
 
     -- | Pin all nodes at their current positions (fx = x, fy = y).
     -- | Use before starting a transition to freeze current state.
@@ -219,7 +228,7 @@ initWASM = WASMSetup.initWasm
 -- |
 -- | - The emitter works with Halogen, React, or vanilla JS
 -- | - Events include Tick, Started, Stopped, and Completed
--- | - The same code works for both D3 and WASM engines
+-- | - The same code works for both engines
 -- | Note: No Ord constraint required! We use renderTreeKeyed with a key function
 -- | based on node.id, which doesn't require Ord on the datum type. This allows
 -- | SimulationNode r (an extensible record) to work without needing Ord derivation.
@@ -228,31 +237,32 @@ runSimulation
    . SimulationConfig r
   -> Effect (SimulationResult r)
 runSimulation config = case config.engine of
-  D3 -> runD3Simulation config
+  Pure -> runPureSimulation config
+  D3 -> runPureSimulation config
   WASM -> runWASMSimulation config
 
 -- =============================================================================
--- D3 Engine Implementation
+-- Default (pure PureScript) Engine Implementation
 -- =============================================================================
 
-runD3Simulation
+runPureSimulation
   :: forall r
    . SimulationConfig r
   -> Effect (SimulationResult r)
-runD3Simulation config = do
+runPureSimulation config = do
   -- Create emitter for events
   { emitter, handle: emitterHandle } <- Emitter.create
 
   -- Create simulation with alphaDecay from setup
   -- This is important because sim.config is immutable after creation
-  let simConfig = D3Sim.defaultConfig
+  let simConfig = ForceSim.defaultConfig
         { alphaDecay = config.setup.params.alphaDecay
         , alphaMin = config.alphaMin
         }
-  sim <- D3Sim.create simConfig
+  sim <- ForceSim.create simConfig
 
   -- Apply initial setup with data
-  _ <- D3Setup.applySetupWithData config.setup config.nodes config.links sim
+  _ <- ForceSetup.applySetupWithData config.setup config.nodes config.links sim
 
   -- Store current setup for updates
   setupRef <- Ref.new config.setup
@@ -272,7 +282,7 @@ runD3Simulation config = do
 
   -- Register consumer
   _ <- Coord.register coord
-    { tick: d3Consumer sim emitterHandle alphaRef config.alphaMin
+    { tick: pureConsumer sim emitterHandle alphaRef config.alphaMin
     , onComplete: do
         Ref.write false runningRef
         Emitter.emit emitterHandle Completed
@@ -281,117 +291,80 @@ runD3Simulation config = do
   -- Start coordinator
   Coord.start coord
 
+  let
+    -- Heat the simulation up again and make sure something is ticking it.
+    -- If it had run to completion the coordinator has stopped, so a new one
+    -- is started: without that a reheat (a drag, say) would change nothing
+    -- anyone could see.
+    rekindle = do
+      Ref.write 1.0 sim.alpha
+      Ref.write 1.0 alphaRef
+      Emitter.emit emitterHandle Started
+      running <- Ref.read runningRef
+      unless running do
+        Ref.write true runningRef
+        -- Stop the old coordinator before creating a new one (two would
+        -- tick the simulation twice a frame)
+        oldCoord <- Ref.read coordRef
+        Coord.stop oldCoord
+        c <- Coord.create
+        Ref.write c coordRef
+        _ <- Coord.register c
+          { tick: pureConsumer sim emitterHandle alphaRef config.alphaMin
+          , onComplete: do
+              Ref.write false runningRef
+              Emitter.emit emitterHandle Completed
+          }
+        Coord.start c
+
   -- Return handle and emitter
   pure
     { events: emitter
     , handle:
         { updateData: \nodes links -> do
             currentSetup <- Ref.read setupRef
-            result <- D3Setup.applySetupWithData currentSetup nodes links sim
-            D3Sim.reheat sim
-            Ref.write 1.0 alphaRef
-            Emitter.emit emitterHandle Started
-            -- Restart coordinator if simulation has completed
-            running <- Ref.read runningRef
-            unless running do
-              Ref.write true runningRef
-              -- Stop old coordinator and create new one
-              oldCoord <- Ref.read coordRef
-              Coord.stop oldCoord
-              c <- Coord.create
-              Ref.write c coordRef
-              _ <- Coord.register c
-                { tick: d3Consumer sim emitterHandle alphaRef config.alphaMin
-                , onComplete: do
-                    Ref.write false runningRef
-                    Emitter.emit emitterHandle Completed
-                }
-              Coord.start c
+            result <- ForceSetup.applySetupWithData currentSetup nodes links sim
+            rekindle
             pure result
-
         , updateSetup: \newSetup -> do
             Ref.write newSetup setupRef
-            D3Setup.applySetup newSetup sim
-            D3Sim.reheat sim
-            Ref.write 1.0 alphaRef
-            Emitter.emit emitterHandle Started
-            -- Restart coordinator if simulation has completed
-            running <- Ref.read runningRef
-            unless running do
-              Ref.write true runningRef
-              -- Stop old coordinator and create new one
-              oldCoord <- Ref.read coordRef
-              Coord.stop oldCoord
-              c <- Coord.create
-              Ref.write c coordRef
-              _ <- Coord.register c
-                { tick: d3Consumer sim emitterHandle alphaRef config.alphaMin
-                , onComplete: do
-                    Ref.write false runningRef
-                    Emitter.emit emitterHandle Completed
-                }
-              Coord.start c
-
-        , getNodes: D3Sim.getNodes sim
-
+            ForceSetup.applySetup newSetup sim
+            rekindle
+        , getNodes: ForceSim.getNodes sim
         , getAlpha: Ref.read alphaRef
-
         , stop: do
             running <- Ref.read runningRef
             when running do
               Ref.write false runningRef
-              Emitter.emit emitterHandle Stopped
-
-        , start: do
-            running <- Ref.read runningRef
-            unless running do
-              D3Sim.reheat sim
-              Ref.write 1.0 alphaRef
-              Ref.write true runningRef
-              Emitter.emit emitterHandle Started
-              -- Stop old coordinator before creating new one (prevents CPU spike from multiple RAF loops)
               oldCoord <- Ref.read coordRef
               Coord.stop oldCoord
-              -- Re-register and restart
-              c <- Coord.create
-              Ref.write c coordRef
-              _ <- Coord.register c
-                { tick: d3Consumer sim emitterHandle alphaRef config.alphaMin
-                , onComplete: do
-                    Ref.write false runningRef
-                    Emitter.emit emitterHandle Completed
-                }
-              Coord.start c
-
-        , reheat: do
-            D3Sim.reheat sim
-            Ref.write 1.0 alphaRef
-            Emitter.emit emitterHandle Started
-
+              Emitter.emit emitterHandle Stopped
+        , start: do
+            running <- Ref.read runningRef
+            unless running rekindle
+        , reheat: rekindle
         , interpolatePositions: \startPos targetPos progress ->
-            D3Sim.interpolatePositionsInPlace startPos targetPos progress sim
-
-        , pinNodes: D3Sim.pinNodesInPlace sim
-
-        , unpinNodes: D3Sim.unpinNodesInPlace sim
+            ForceSim.interpolatePositionsInPlace startPos targetPos progress sim
+        , pinNodes: ForceSim.pinNodesInPlace sim
+        , unpinNodes: ForceSim.unpinNodesInPlace sim
         }
     }
 
--- | D3 consumer for coordinator - emits Tick events
+-- | The default engine's consumer for the coordinator - emits Tick events
 -- | Rendering is handled by callers subscribing to Tick events
-d3Consumer
+pureConsumer
   :: forall r
-   . D3Sim.Simulation r ()
+   . ForceSim.Simulation r ()
   -> Emitter.EmitterHandle
   -> Ref.Ref Number
   -> Number
   -> Coord.Milliseconds
   -> Effect Coord.TickResult
-d3Consumer sim emitterHandle alphaRef alphaMin _deltaMs = do
-  -- Advance the D3 force simulation by one tick
-  alpha <- D3Sim.tick sim
+pureConsumer sim emitterHandle alphaRef alphaMin _deltaMs = do
+  -- Advance the simulation by one tick
+  alpha <- ForceSim.tick sim
   Ref.write alpha alphaRef
-  nodes <- D3Sim.getNodes sim
+  nodes <- ForceSim.getNodes sim
   Emitter.emit emitterHandle (Tick { alpha, nodeCount: Array.length nodes })
   pure $ if alpha < alphaMin
     then Coord.Completed
@@ -529,7 +502,7 @@ runWASMSimulation config = do
             Emitter.emit emitterHandle Started
 
         -- Position interpolation not yet implemented for WASM engine.
-        -- ForcePlayground uses D3 engine, so this is low priority.
+        -- ForcePlayground uses the default engine, so this is low priority.
         , interpolatePositions: \_ _ _ -> pure unit
 
         , pinNodes: pure unit

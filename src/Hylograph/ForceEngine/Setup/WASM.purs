@@ -1,28 +1,29 @@
 -- | WASM Force Setup
 -- |
 -- | Declarative force configuration for WASM simulation engine.
--- | Uses the same Setup types as D3, providing functional parity.
+-- | Uses the same Setup types as the default engine, and means the same.
 -- |
--- | What a `Setup` means here, force by force, is what it means to the D3
--- | engine (`Hylograph.ForceEngine.Setup.applySetup`):
+-- | What a `Setup` means here, force by force, is what it means to the
+-- | default engine (`Hylograph.ForceEngine.Setup.applySetup`), and
+-- | `test/engine-parity.mjs` holds the two to each other:
 -- | - any number of forces of any type; a later force replaces an earlier
--- |   one of the same name, and each tick applies them in name order (the D3
--- |   engine keeps them in a `Map` keyed by name);
--- | - links name their endpoints by node `id`, not by array position.
--- |
--- | This engine also runs what the D3 engine cannot: Towards, RectCollide,
--- | Contain, Cohesion, Directional, ManyBody scoped by group, and a Collide
--- | with a filter or with its strength scaled by alpha.
+-- |   one of the same name, and each tick applies them in name order (the
+-- |   default engine keeps them in a `Map` keyed by name);
+-- | - links name their endpoints by node `id`, not by array position;
+-- | - new nodes are initialized as d3 initializes them
+-- |   (`Hylograph.ForceEngine.Core.initializeNodes`).
 -- |
 -- | `Dynamic` values, filters, groups and regions are evaluated once per
 -- | node (or per link) when the setup is applied and handed to the kernel
--- | as arrays; the kernel never calls back into JavaScript. A `dynamic`
--- | strength on ManyBody, PositionX/Y or Radial, and a `dynamic` Radial
--- | radius, are honoured here; the D3 engine reads those as 0.
+-- | as arrays; the kernel never calls back into JavaScript.
 -- |
--- | The kernel is deterministic: the same nodes, links and setup give the
--- | same positions on every run. (The D3 engine is not, when nodes coincide:
--- | it separates them with `Math.random`.)
+-- | Both engines are deterministic: the same nodes, links and setup give the
+-- | same positions on every run. The kernel computes in f32 and the default
+-- | engine in f64, so the two agree to float width over one tick and drift
+-- | apart after that, as any two roundings of a force layout do.
+-- |
+-- | One difference remains: a link naming a node that is not there is left
+-- | out here, with a warning; the default engine makes it an error.
 -- |
 -- | Example:
 -- | ```purescript
@@ -98,6 +99,7 @@ import Effect.Console (warn)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
 
+import Hylograph.ForceEngine.Core as Core
 import Hylograph.ForceEngine.WASM as FFI
 import Hylograph.ForceEngine.Simulation (SimulationNode) as Exports
 import Hylograph.ForceEngine.Simulation (SimulationNode)
@@ -175,6 +177,11 @@ create
 create nodes links = do
   wasmSim <- FFI.create (Array.length nodes)
 
+  -- What the default engine does to new nodes, so that a Setup means the
+  -- same on both: an index, a pinned node on its pin, a node with no
+  -- position on d3's phyllotaxis spiral, a node with no velocity at rest.
+  Core.initializeNodes nodes
+
   -- Sync initial positions, velocities and pinning to WASM
   FFI.syncNodesToWasm wasmSim nodes
 
@@ -213,7 +220,7 @@ free sim = FFI.free sim.wasmSim
 -- | filters are evaluated against the simulation's current nodes; apply the
 -- | setup again after changing what they read.
 -- |
--- | See the module header for how this compares with the D3 engine.
+-- | See the module header for how this compares with the default engine.
 applySetup
   :: forall r
    . Setup (SimulationNode r)
@@ -242,7 +249,7 @@ applySetup setupConfig sim = do
   FFI.setAlphaTarget sim.wasmSim params.alphaTarget
   FFI.setVelocityRetention sim.wasmSim params.velocityRetention
 
--- | The forces of a setup as the D3 engine would apply them. It keeps forces
+-- | The forces of a setup as the default engine applies them. It keeps forces
 -- | in a `Map` keyed by name, so a later force replaces an earlier one of the
 -- | same name and each tick runs them in name order, not in setup order.
 inApplicationOrder :: forall node. Array (ForceConfig node) -> Array (ForceConfig node)
@@ -421,9 +428,9 @@ flatTargets target = Array.concatMap \node -> case target node of
   Nothing -> [ nan, nan ]
 
 -- | Hand the links to the kernel. Links name their endpoints by node `id`,
--- | as they do for the D3 engine; the kernel wants positions in the node
--- | array. A link naming a node that is not there is left out, with a
--- | warning (d3-force throws).
+-- | as they do for the default engine; the kernel wants positions in the
+-- | node array. A link naming a node that is not there is left out, with a
+-- | warning (the default engine, like d3-force, makes it an error).
 setLinks
   :: forall r
    . FFI.WASMSimulation
@@ -449,7 +456,7 @@ setLinks wasmSim nodes links = do
 
 -- | Apply setup with new nodes and links, using GUP semantics.
 -- |
--- | This provides functional parity with D3's applySetupWithData:
+-- | This provides functional parity with the default engine's applySetupWithData:
 -- | 1. Force configuration (via applySetup)
 -- | 2. Node GUP: diff desired vs current, preserve simulation state
 -- | 3. Link GUP: diff desired vs current
@@ -478,7 +485,7 @@ applySetupWithData setupConfig desiredNodes desiredLinks sim = do
   currentNodes <- Ref.read sim.nodesRef
   currentLinks <- Ref.read sim.linksRef
 
-  -- Compute node GUP (reusing D3's logic)
+  -- Compute node GUP (the default engine's logic)
   let nodeResult = computeNodeGUP currentNodes desiredNodes
 
   -- Write merged nodes to ref
@@ -489,6 +496,9 @@ applySetupWithData setupConfig desiredNodes desiredLinks sim = do
   let newCount = Array.length nodeResult.merged
   when (currentCount /= newCount) do
     FFI.setNodeCount sim.wasmSim newCount
+
+  -- As the default engine does: see `create`
+  Core.initializeNodes nodeResult.merged
 
   -- Sync positions, velocities and pinning to WASM
   FFI.syncNodesToWasm sim.wasmSim nodeResult.merged

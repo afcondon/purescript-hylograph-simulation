@@ -62,8 +62,6 @@ module Hylograph.Scene.Handle
 import Prelude
 
 import Data.Array as Array
-import Data.Foldable (for_)
-import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Set as Set
 import Data.Tuple (Tuple(..))
@@ -71,7 +69,6 @@ import Effect (Effect)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Foreign.Object as Object
-import Hylograph.ForceEngine.Core as Core
 import Hylograph.ForceEngine.Simulation as Sim
 import Hylograph.ForceEngine.Render (GroupId)
 import Hylograph.Scene.Engine as Engine
@@ -217,12 +214,7 @@ applyRulesInPlace rules sim = do
 
 -- | Re-initialize all forces after node data changes
 reinitializeForces :: forall nodeRow linkRow. Sim.Simulation nodeRow linkRow -> Effect Unit
-reinitializeForces sim = do
-  nodes <- Ref.read sim.nodes
-  forces <- Ref.read sim.forces
-  for_ (Map.toUnfoldable forces :: Array (Tuple String Core.ForceHandle)) \(Tuple _ handle) -> do
-    _ <- Core.initializeForce handle nodes
-    pure unit
+reinitializeForces = Sim.reinitializeForces
 
 -- | Clean up resources.
 -- |

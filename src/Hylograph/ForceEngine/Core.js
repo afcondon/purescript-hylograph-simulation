@@ -1,375 +1,8 @@
-// Pure Force Engine FFI
+// Force Engine Core FFI
 //
-// This module extracts ONLY the force calculation functions from D3.
-// No simulation wrapper, no timers, no lifecycle management.
-//
-// Each force is just: initialize(nodes) -> force(alpha) -> mutates vx/vy
-//
-// D3 dependencies: d3-force, d3-selection, d3-drag
-import {
-  forceManyBody, forceCollide, forceLink, forceCenter,
-  forceX, forceY, forceRadial
-} from "d3-force";
-import { select, pointer } from "d3-selection";
-import { drag } from "d3-drag";
-
-// =============================================================================
-// Force Creation (returns D3 force objects)
-// =============================================================================
-
-// Create a many-body (charge) force
-export function createManyBody_(config) {
-  const force = forceManyBody()
-    .strength(config.strength)
-    .theta(config.theta)
-    .distanceMin(config.distanceMin)
-    .distanceMax(config.distanceMax);
-  return force;
-}
-
-// Create a collision force
-// Note: radius and strength can be numbers or functions
-export function createCollide_(config) {
-  const force = forceCollide()
-    .radius(config.radius)
-    .strength(config.strength)
-    .iterations(config.iterations);
-  return force;
-}
-
-// Create a collision force with dynamic radius function
-export function createCollideWithRadius_(radiusFn) {
-  return function(strength) {
-    return function(iterations) {
-      const force = forceCollide()
-        .radius(function(d, i) { return radiusFn(d)(i)(); })
-        .strength(strength)
-        .iterations(iterations);
-      return force;
-    };
-  };
-}
-
-// Create a link force
-// IMPORTANT: Uses .id(d => d.id) so that link source/target values are matched
-// against node.id, not array index. This is essential for GUP (General Update Pattern)
-// where nodes are filtered and array indices change.
-export function createLink_(config) {
-  const force = forceLink()
-    .id(d => d.id)  // Use node.id for lookup, not array index
-    .distance(config.distance)
-    .strength(config.strength)
-    .iterations(config.iterations);
-  return force;
-}
-
-// Create a link force with dynamic strength per-link
-// strengthAccessor is called for each link to get strength (typically from link.weight)
-// Uses .id(d => d.id) for same reason as createLink_
-export function createLinkDynamic_(config) {
-  const force = forceLink()
-    .id(d => d.id)  // Use node.id for lookup, not array index
-    .distance(config.distance)
-    .strength(function(link) {
-      return config.strengthAccessor(link);
-    })
-    .iterations(config.iterations);
-  return force;
-}
-
-// Create a link force with one distance and one strength per link, given as
-// arrays in link order (the Setup evaluates them; nothing calls back).
-// Uses .id(d => d.id) for same reason as createLink_
-export function createLinkPerLink_(config) {
-  const force = forceLink()
-    .id(d => d.id)
-    .distance(function(_link, i) { return config.distances[i]; })
-    .strength(function(_link, i) { return config.strengths[i]; })
-    .iterations(config.iterations);
-  return force;
-}
-
-// Create a center force
-export function createCenter_(config) {
-  const force = forceCenter(config.x, config.y)
-    .strength(config.strength);
-  return force;
-}
-
-// Create an X positioning force
-export function createForceX_(config) {
-  const force = forceX(config.x)
-    .strength(config.strength);
-  return force;
-}
-
-// Create a Y positioning force
-export function createForceY_(config) {
-  const force = forceY(config.y)
-    .strength(config.strength);
-  return force;
-}
-
-// Create a radial force
-export function createRadial_(config) {
-  const force = forceRadial(config.radius, config.x, config.y)
-    .strength(config.strength);
-  return force;
-}
-
-// =============================================================================
-// Filtered/Dynamic Force Creation
-// =============================================================================
-
-// Create a many-body force with filter predicate
-// Only applies charge to nodes where filter(node) returns true
-export function createManyBodyFiltered_(config) {
-  const force = forceManyBody()
-    .strength(function(d) {
-      return config.filter(d) ? config.strength : 0;
-    })
-    .theta(config.theta)
-    .distanceMin(config.distanceMin)
-    .distanceMax(config.distanceMax);
-  return force;
-}
-
-// Create a radial force with filter predicate
-export function createRadialFiltered_(config) {
-  const force = forceRadial(config.radius, config.x, config.y)
-    .strength(function(d) {
-      return config.filter(d) ? config.strength : 0;
-    });
-  return force;
-}
-
-// Create a collision force with dynamic radius accessor
-// radiusAccessor is called per-node to get collision radius
-export function createCollideDynamic_(config) {
-  const force = forceCollide()
-    .radius(function(d) {
-      return config.radiusAccessor(d);
-    })
-    .strength(config.strength)
-    .iterations(config.iterations);
-  return force;
-}
-
-// Create an X positioning force with dynamic target accessor
-// xAccessor is called per-node to get target X position
-export function createForceXDynamic_(config) {
-  const force = forceX()
-    .x(function(d) {
-      return config.xAccessor(d);
-    })
-    .strength(config.strength);
-  return force;
-}
-
-// Create a Y positioning force with dynamic target accessor
-export function createForceYDynamic_(config) {
-  const force = forceY()
-    .y(function(d) {
-      return config.yAccessor(d);
-    })
-    .strength(config.strength);
-  return force;
-}
-
-// Create an X positioning force with a per-node target and a filter:
-// strength 0 for nodes the filter rejects.
-export function createForceXFiltered_(config) {
-  return forceX()
-    .x(function(d) { return config.xAccessor(d); })
-    .strength(function(d) { return config.filter(d) ? config.strength : 0; });
-}
-
-// Create a Y positioning force with a per-node target and a filter
-export function createForceYFiltered_(config) {
-  return forceY()
-    .y(function(d) { return config.yAccessor(d); })
-    .strength(function(d) { return config.filter(d) ? config.strength : 0; });
-}
-
-// =============================================================================
-// Optimized Grid Forces (no FFI callbacks - reads node.gridX/gridY directly)
-// =============================================================================
-
-// Create ForceX that reads node.gridX directly (no PureScript callback)
-export function createForceXGrid_(strength) {
-  return forceX()
-    .x(d => d.gridX)
-    .strength(strength);
-}
-
-// Create ForceY that reads node.gridY directly (no PureScript callback)
-export function createForceYGrid_(strength) {
-  return forceY()
-    .y(d => d.gridY)
-    .strength(strength);
-}
-
-// Create collision force that reads node.r directly (no PureScript callback)
-// Adds padding to node radius
-export function createCollideGrid_(padding) {
-  return function(strength) {
-    return function(iterations) {
-      return forceCollide()
-        .radius(d => d.r + padding)
-        .strength(strength)
-        .iterations(iterations);
-    };
-  };
-}
-
-// =============================================================================
-// Force Initialization
-// =============================================================================
-
-// Initialize a force with nodes
-// This must be called before applying the force
-// D3 forces expect (nodes, random) - random is used for jiggle
-export function initializeForce_(force) {
-  return function(nodes) {
-    return function() {
-      if (force.initialize) {
-        force.initialize(nodes, Math.random);
-      }
-      return force;
-    };
-  };
-}
-
-// Initialize a link force with links
-// Link forces need both nodes (via initialize) and links (via links())
-// Note: We COPY links before passing to D3 because forceLink.links() MUTATES
-// the link objects, replacing source/target integers with node references.
-export function initializeLinkForce_(force) {
-  return function(nodes) {
-    return function(links) {
-      return function() {
-        if (force.initialize) {
-          force.initialize(nodes, Math.random);
-        }
-        // Copy links to preserve originals for DOM operations
-        const linksCopy = links.map(l => ({...l}));
-        force.links(linksCopy);
-        return force;
-      };
-    };
-  };
-}
-
-// =============================================================================
-// Force Application (the actual calculation)
-// =============================================================================
-
-// Apply a force to nodes
-// This is the core calculation - it mutates vx/vy on nodes
-export function applyForce_(force) {
-  return function(alpha) {
-    return function() {
-      force(alpha);
-    };
-  };
-}
-
-// =============================================================================
-// Velocity & Position Update
-// =============================================================================
-
-// Update velocities with decay (friction)
-// This should be called once per tick, after all forces
-export function applyVelocityDecay_(nodes) {
-  return function(velocityDecay) {
-    return function() {
-      for (let i = 0; i < nodes.length; i++) {
-        const node = nodes[i];
-        node.vx *= velocityDecay;
-        node.vy *= velocityDecay;
-      }
-    };
-  };
-}
-
-// Update positions from velocities
-// This should be called once per tick, after velocity decay
-export function updatePositions_(nodes) {
-  return function() {
-    for (let i = 0; i < nodes.length; i++) {
-      const node = nodes[i];
-      node.x += node.vx;
-      node.y += node.vy;
-    }
-  };
-}
-
-// Combined: apply velocity decay and update positions
-// Respects fixed nodes (fx/fy) - if set, node is pinned there
-export function integratePositions_(nodes) {
-  return function(velocityDecay) {
-    return function() {
-      for (let i = 0; i < nodes.length; i++) {
-        const node = nodes[i];
-
-        // Handle X: pinned or free
-        if (node.fx != null) {
-          node.x = node.fx;
-          node.vx = 0;
-        } else {
-          node.vx *= velocityDecay;
-          node.x += node.vx;
-        }
-
-        // Handle Y: pinned or free
-        if (node.fy != null) {
-          node.y = node.fy;
-          node.vy = 0;
-        } else {
-          node.vy *= velocityDecay;
-          node.y += node.vy;
-        }
-      }
-    };
-  };
-}
-
-// =============================================================================
-// Alpha Management
-// =============================================================================
-
-// Calculate new alpha value (the "cooling" step)
-export function decayAlpha_(alpha) {
-  return function(alphaMin) {
-    return function(alphaDecay) {
-      return function(alphaTarget) {
-        // D3's formula: alpha += (alphaTarget - alpha) * alphaDecay
-        const newAlpha = alpha + (alphaTarget - alpha) * alphaDecay;
-        // Return 0 if below minimum (simulation should stop)
-        return newAlpha < alphaMin ? 0.0 : newAlpha;
-      };
-    };
-  };
-}
-
-// =============================================================================
-// Node Initialization
-// =============================================================================
-
-// Initialize node indices and default velocities
-export function initializeNodes_(nodes) {
-  return function() {
-    for (let i = 0; i < nodes.length; i++) {
-      const node = nodes[i];
-      node.index = i;
-      if (node.vx === undefined) node.vx = 0;
-      if (node.vy === undefined) node.vy = 0;
-      // If no position, use random (D3's default behavior)
-      if (node.x === undefined) node.x = Math.random() * 100 - 50;
-      if (node.y === undefined) node.y = Math.random() * 100 - 50;
-    }
-  };
-}
+// What is left here is the browser: the animation frame and two kinds of
+// drag. The forces themselves are PureScript (hylograph-forces-pure); there
+// is no D3 in this file or anywhere else in the library.
 
 // =============================================================================
 // Animation Frame
@@ -399,81 +32,11 @@ export function requestAnimationFrame_(callback) {
 }
 
 // =============================================================================
-// Force Parameter Updates (for live tuning)
-// =============================================================================
-
-export function setManyBodyStrength_(force) {
-  return function(value) {
-    return function() {
-      force.strength(value);
-    };
-  };
-}
-
-export function setManyBodyTheta_(force) {
-  return function(value) {
-    return function() {
-      force.theta(value);
-    };
-  };
-}
-
-export function setManyBodyDistanceMin_(force) {
-  return function(value) {
-    return function() {
-      force.distanceMin(value);
-    };
-  };
-}
-
-export function setManyBodyDistanceMax_(force) {
-  return function(value) {
-    return function() {
-      force.distanceMax(value);
-    };
-  };
-}
-
-export function setCollideRadius_(force) {
-  return function(value) {
-    return function() {
-      force.radius(value);
-    };
-  };
-}
-
-export function setCollideStrength_(force) {
-  return function(value) {
-    return function() {
-      force.strength(value);
-    };
-  };
-}
-
-export function setLinkDistance_(force) {
-  return function(value) {
-    return function() {
-      force.distance(value);
-    };
-  };
-}
-
-export function setLinkStrength_(force) {
-  return function(value) {
-    return function() {
-      force.strength(value);
-    };
-  };
-}
-
-// =============================================================================
 // Mutable Cancel Ref (for animation loop)
 // =============================================================================
 
 export function newCancelRef() {
-  return function() {
-    return { cancel: function() {} };
-  };
+  return { cancel: function() {} };
 }
 
 export function setCancelRef(ref) {
@@ -491,151 +54,122 @@ export function getCancelRef(ref) {
 }
 
 // =============================================================================
-// Drag Behavior
+// Drag Behavior (native Pointer Events)
 // =============================================================================
 
-// Attach simulation-aware drag to an array of DOM elements
-// Takes a PureScript Effect Unit callback for reheating
-// Works with ForceEngine's PureScript-based simulation
-export function attachDragWithReheat_(elements) {
-  return function(reheatCallback) {
-    return function() {
-      function dragstarted(event) {
-        // Reheat the simulation
-        reheatCallback();
-        // Set fixed position
-        event.subject.fx = event.subject.x;
-        event.subject.fy = event.subject.y;
-      }
-
-      function dragged(event) {
-        // Update fixed position to follow mouse
-        event.subject.fx = event.x;
-        event.subject.fy = event.y;
-      }
-
-      function dragended(event) {
-        // Release fixed position (unless we want sticky drag)
-        event.subject.fx = null;
-        event.subject.fy = null;
-      }
-
-      const dragBehavior = drag()
-        .on('start', dragstarted)
-        .on('drag', dragged)
-        .on('end', dragended);
-
-      // Apply drag to each element
-      elements.forEach(function(el) {
-        select(el)
-          .call(dragBehavior)
-          .style('cursor', 'grab');
-      });
-    };
-  };
+// Where a pointer event is, in the coordinates of an SVG element (through
+// its screen transform, so viewBox, zoom and pan are all accounted for), or
+// relative to the box of an HTML one.
+function pointerIn(container, event) {
+  const svg = container.ownerSVGElement || (container.tagName === 'svg' ? container : null);
+  if (svg && container.getScreenCTM) {
+    const ctm = container.getScreenCTM();
+    if (ctm) {
+      const point = svg.createSVGPoint();
+      point.x = event.clientX;
+      point.y = event.clientY;
+      const local = point.matrixTransform(ctm.inverse());
+      return [local.x, local.y];
+    }
+  }
+  const box = container.getBoundingClientRect();
+  return [event.clientX - box.left, event.clientY - box.top];
 }
 
-// Attach drag to transformed group elements (like bubble packs)
-// Uses a container selector to get pointer coordinates in the right space
-// containerSelector: CSS selector for the coordinate reference container (e.g., "#zoom-group" or "svg")
+// One drag on one element. `subjectOf(event)` finds the simulation node,
+// `frame` is the element whose coordinates the node lives in, and `release`
+// decides what happens to the pin when the drag ends. The node keeps the
+// offset from the pointer that it had when it was picked up.
+function attachDrag(element, subjectOf, frame, reheat, release) {
+  let subject = null;
+  let offset = [0, 0];
+
+  element.addEventListener('pointerdown', function(event) {
+    if (event.button !== 0) return;
+    subject = subjectOf(event);
+    if (!subject) return;
+    element.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    reheat();
+    const [x, y] = pointerIn(frame(), event);
+    offset = [subject.x - x, subject.y - y];
+    subject.fx = subject.x;
+    subject.fy = subject.y;
+    element.style.cursor = 'grabbing';
+  });
+
+  element.addEventListener('pointermove', function(event) {
+    if (!subject) return;
+    const [x, y] = pointerIn(frame(), event);
+    subject.fx = x + offset[0];
+    subject.fy = y + offset[1];
+  });
+
+  const end = function(event) {
+    if (!subject) return;
+    if (element.hasPointerCapture(event.pointerId)) element.releasePointerCapture(event.pointerId);
+    release(subject);
+    subject = null;
+    element.style.cursor = 'grab';
+  };
+  element.addEventListener('pointerup', end);
+  element.addEventListener('pointercancel', end);
+  element.addEventListener('dragstart', function(event) { event.preventDefault(); });
+
+  element.style.cursor = 'grab';
+  element.style.touchAction = 'none';
+}
+
+// Drag transformed group elements (like bubble packs). The node is the datum
+// of the nearest ancestor of what was pressed with the class `module-pack`;
+// the pointer is read in the coordinates of the container the selector names.
 export function attachGroupDragWithReheat_(elements) {
   return function(containerSelector) {
     return function(reheatCallback) {
       return function() {
-        const container = select(containerSelector).node();
+        const container = document.querySelector(containerSelector);
         if (!container) {
           return;
         }
-
-        const dragBehavior = drag()
-          // Custom subject: walk up DOM from click target to find .module-pack group's data
-          .subject(function(event) {
-            let el = event.sourceEvent.target;
-            while (el && !el.classList?.contains('module-pack')) {
-              el = el.parentElement;
-            }
-            return el?.__data__;
-          })
-          .on('start', function(event) {
-            reheatCallback();
-            event.subject.fx = event.subject.x;
-            event.subject.fy = event.subject.y;
-          })
-          .on('drag', function(event) {
-            const [px, py] = pointer(event, container);
-            event.subject.fx = px;
-            event.subject.fy = py;
-          })
-          .on('end', function(event) {
-            event.subject.fx = null;
-            event.subject.fy = null;
-          });
-
-        // Apply drag to each element
+        const subjectOf = function(event) {
+          let el = event.target;
+          while (el && !el.classList?.contains('module-pack')) {
+            el = el.parentElement;
+          }
+          return el?.__data__;
+        };
+        const release = function(subject) {
+          subject.fx = null;
+          subject.fy = null;
+        };
         elements.forEach(function(el) {
-          select(el)
-            .call(dragBehavior)
-            .style('cursor', 'grab');
+          attachDrag(el, subjectOf, function() { return container; }, reheatCallback, release);
         });
       };
     };
   };
 }
 
-// Attach drag with toggle-pinning behavior
-// First drag pins the node where you drop it, second drag unpins it
-// The node stays pinned between drags (fx/fy remain set)
+// Drag with toggle-pinning behavior: a node stays pinned where it is
+// dropped; pressing a pinned node and letting go within 3px unpins it.
 export function attachPinningDrag_(elements) {
   return function(reheatCallback) {
     return function() {
-      function dragstarted(event) {
-        // Reheat the simulation
-        reheatCallback();
-        // Set fixed position to current location
-        event.subject.fx = event.subject.x;
-        event.subject.fy = event.subject.y;
-      }
-
-      function dragged(event) {
-        // Update fixed position to follow mouse
-        event.subject.fx = event.x;
-        event.subject.fy = event.y;
-      }
-
-      function dragended(event) {
-        // Check if we moved significantly - if not, treat as "unpin" click
-        const dx = event.subject.fx - event.subject.x;
-        const dy = event.subject.fy - event.subject.y;
+      const release = function(subject) {
+        const dx = subject.fx - subject.x;
+        const dy = subject.fy - subject.y;
         const distMoved = Math.sqrt(dx * dx + dy * dy);
-
-        // If node was already pinned and barely moved, unpin it
-        // We detect "was pinned" by checking if x/y matched fx/fy at drag start
-        // For simplicity: if moved less than 3px total, toggle pin state
-        if (distMoved < 3) {
-          // Toggle: if was at exact pinned position, unpin
-          if (event.subject._wasPinned) {
-            event.subject.fx = null;
-            event.subject.fy = null;
-            delete event.subject._wasPinned;
-          }
+        if (distMoved < 3 && subject._wasPinned) {
+          subject.fx = null;
+          subject.fy = null;
+          delete subject._wasPinned;
         }
-        // Otherwise keep it pinned where we dropped it
-        // Mark as pinned for next drag detection
-        if (event.subject.fx != null) {
-          event.subject._wasPinned = true;
+        if (subject.fx != null) {
+          subject._wasPinned = true;
         }
-      }
-
-      const dragBehavior = drag()
-        .on('start', dragstarted)
-        .on('drag', dragged)
-        .on('end', dragended);
-
-      // Apply drag to each element
+      };
       elements.forEach(function(el) {
-        select(el)
-          .call(dragBehavior)
-          .style('cursor', 'grab');
+        attachDrag(el, function() { return el.__data__; }, function() { return el.parentElement || el; }, reheatCallback, release);
       });
     };
   };

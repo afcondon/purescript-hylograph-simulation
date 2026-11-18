@@ -17,7 +17,7 @@ const kernel = join(here, '../../../purescript-hylograph-showcases/wasm-force-de
 const ps = (module) => import(pathToFileURL(join(output, module, 'index.js')));
 const Setup = await ps('Hylograph.ForceEngine.Setup');
 const W = await ps('Hylograph.ForceEngine.Setup.WASM');
-const D3Sim = await ps('Hylograph.ForceEngine.Simulation');
+const PureSim = await ps('Hylograph.ForceEngine.Simulation');
 const Maybe = await ps('Data.Maybe');
 
 const realFetch = globalThis.fetch;
@@ -51,12 +51,12 @@ const simulation = (nodes, setup) => { const sim = W.create(nodes)([])(); W.appl
   check(byNewName.params.velocityRetention === 0.3 && byOldName.params.velocityRetention === 0.3, 'withVelocityDecay (deprecated) sets the same field to the same number');
   check(Setup.defaultParams.velocityRetention === 0.4 && !('velocityDecay' in Setup.defaultParams), 'the default is unchanged (0.4 kept) and the old field is gone');
 
-  // The D3 engine reads the same field the same way.
-  const d3 = D3Sim.create({ alphaMin: 0.001, alphaDecay: 0, alphaTarget: 1, velocityRetention: 0.7 })();
+  // The default engine reads the same field the same way.
+  const d3 = PureSim.create({ alphaMin: 0.001, alphaDecay: 0, alphaTarget: 1, velocityRetention: 0.7 })();
   const d3Nodes = [node(0, 0, 0, { vx: 10 })];
-  D3Sim.setNodes(d3Nodes)(d3)();
-  quietly(() => D3Sim.tick(d3)());
-  check(Math.abs(d3.nodes.value[0].x - 7) < 1e-9, `the D3 engine keeps the same share: moved ${d3.nodes.value[0].x}`);
+  PureSim.setNodes(d3Nodes)(d3)();
+  quietly(() => PureSim.tick(d3)());
+  check(Math.abs(d3.nodes.value[0].x - 7) < 1e-9, `the default engine keeps the same share: moved ${d3.nodes.value[0].x}`);
 }
 
 // --- step, retargetTo --------------------------------------------------------
@@ -128,8 +128,9 @@ const springs = (retention = 0.85) => Setup.setupWithParams('s')([build(Setup.to
   const still = W.step(sim)().every((d) => d.vx === 0 && d.vy === 0);
   check(shrunk && still && W.reradius('nope')(() => 1)(sim)() === false, 'reradius replaces the radii without re-applying the setup');
 
-  const refuses = (setup) => { const d3 = D3Sim.create({ alphaMin: 0.001, alphaDecay: 0, alphaTarget: 0, velocityRetention: 0.6 })(); D3Sim.setNodes(three())(d3)(); try { Setup.applySetup(setup)(d3)(); return false; } catch (error) { return String(error).includes('bump'); } };
-  check(refuses(collision(Setup.withAlphaScaling(true))) && refuses(collision(Setup.withFilter(() => true))) && !refuses(collision()), 'the D3 engine refuses a yielding Collide by name, and still runs a plain one');
+  // The default engine runs a yielding Collide too (the D3 engine it replaced refused one).
+  const accepts = (setup) => { const sim = PureSim.create({ alphaMin: 0.001, alphaDecay: 0, alphaTarget: 0, velocityRetention: 0.6 })(); PureSim.setNodes(three())(sim)(); try { Setup.applySetup(setup)(sim)(); PureSim.tick(sim)(); return sim.nodes.value.every((d) => Number.isFinite(d.x)); } catch (error) { return false; } };
+  check(accepts(collision(Setup.withAlphaScaling(true))) && accepts(collision(Setup.withFilter(() => true))) && accepts(collision()), 'the default engine runs a yielding Collide, and a plain one');
 }
 
 // --- containEach ------------------------------------------------------------
