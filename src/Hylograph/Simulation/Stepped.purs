@@ -7,14 +7,17 @@
 -- | whichever engine is behind it, meaning the same thing:
 -- |
 -- | - `step` makes one tick and returns the nodes where it left them;
+-- |   `advance` makes several and returns them once;
 -- | - `settled` and the three measures say whether it has come to rest;
 -- | - `snapshot` and `restore` go back to a moment exactly: the ticks that
 -- |   follow a restore are the ticks that followed the snapshot. A snapshot
 -- |   carries the tick number, the nodes, the links and the setup, so a
 -- |   restore needs nothing else, even after the nodes, links or forces have
 -- |   been changed;
--- | - `retarget` gives a Towards force new targets without applying the
--- |   setup again, and `pin` holds or lets go of one node;
+-- | - `retarget` gives a Towards force new targets and `reradius` gives a
+-- |   Collide, Radial or Contain force new radii, without applying the
+-- |   setup again; `reheat` puts alpha back to one; `pin` holds or lets go
+-- |   of one node;
 -- | - `applySetup` changes the forces and parameters and keeps the nodes
 -- |   moving.
 -- |
@@ -95,6 +98,9 @@ type Stepped row =
   { engine :: Engine
   -- | One tick; the nodes where it left them.
   , step :: Effect (Array (SimulationNode row))
+  -- | This many ticks, exactly as that many calls of `step` would make
+  -- | them; the nodes where the last one left them. None, if not positive.
+  , advance :: Int -> Effect (Array (SimulationNode row))
   -- | The nodes as the last tick (or `create`, or `restore`) left them.
   , nodes :: Effect (Array (SimulationNode row))
   , links :: Effect (Array Link)
@@ -119,6 +125,12 @@ type Stepped row =
   -- | New targets for the Towards force of this name. False if the setup
   -- | has none.
   , retarget :: String -> (SimulationNode row -> Maybe Point) -> Effect Boolean
+  -- | New radii for the Collide, Radial or Contain force of this name.
+  -- | False if the setup has none.
+  , reradius :: String -> (SimulationNode row -> Number) -> Effect Boolean
+  -- | Alpha back to one, so that forces scaled by it push again. Changes
+  -- | nothing else: not the forces, the nodes or the tick count.
+  , reheat :: Effect Unit
   -- | Hold the node with this id at a point (`Just`), or let it go.
   , pin :: Int -> Maybe Point -> Effect Unit
   , snapshot :: Effect (Snapshot row)
@@ -193,6 +205,22 @@ retargeted name target setup =
     TowardsForce config | config.name == name -> Just (TowardsForce config { target = target })
     _ -> Nothing
 
+-- | The force of that name, with new radii if it is one that has radii.
+reradiused
+  :: forall node
+   . String
+  -> (node -> Number)
+  -> Setup node
+  -> Maybe { force :: ForceConfig node, setup :: Setup node }
+reradiused name radius setup =
+  Array.findMap sized setup.forces <#> \force -> { force, setup: Setup.updateForce force setup }
+  where
+  sized force = case force of
+    CollideForce config | config.name == name -> Just (Setup.withRadius (Setup.dynamic radius) force)
+    RadialForce config | config.name == name -> Just (Setup.withRadius (Setup.dynamic radius) force)
+    ContainForce config | config.name == name -> Just (Setup.withRadius (Setup.dynamic radius) force)
+    _ -> Nothing
+
 -- | Write a pin on the node with this id, where there is one.
 pinById :: forall row. Int -> Maybe Point -> Array (SimulationNode row) -> Effect Unit
 pinById id at nodes =
@@ -242,15 +270,25 @@ createDefault firstSetup firstNodes firstLinks = do
       carryPins latest own
       pure own
 
+    -- One tick, measured and counted; nothing handed out.
+    oneTick own = do
+      Measure.before watch own
+      void $ Default.tick simulation
+      Measure.after watch own
+      Ref.modify_ (_ + 1) ticks
+
   pure
     { engine: Default
     , step: do
         own <- pinsIn
-        Measure.before watch own
-        void $ Default.tick simulation
-        Measure.after watch own
-        Ref.modify_ (_ + 1) ticks
+        oneTick own
         handOut
+    , advance: \count ->
+        if count <= 0 then Ref.read handed
+        else do
+          own <- pinsIn
+          for_ (Array.range 1 count) \_ -> oneTick own
+          handOut
     , nodes: Ref.read handed
     , links: Default.getLinks simulation
     , alpha: Default.getAlpha simulation
@@ -274,6 +312,15 @@ createDefault firstSetup firstNodes firstLinks = do
             Setup.addForceToSim changed.force simulation
             Ref.write changed.setup current
             pure true
+    , reradius: \name radius -> do
+        setup <- Ref.read current
+        case reradiused name radius setup of
+          Nothing -> pure false
+          Just changed -> do
+            Setup.addForceToSim changed.force simulation
+            Ref.write changed.setup current
+            pure true
+    , reheat: Ref.write 1.0 simulation.alpha
     , pin: \id at -> do
         Default.getNodes simulation >>= pinById id at
         Ref.read handed >>= pinById id at
@@ -321,19 +368,28 @@ createRust firstSetup firstNodes firstLinks = do
     -- same array twice.
     handOut = Ref.read held >>= Wasm.getNodes
 
+    -- One tick, counted. The default engine's alpha is zero once it has
+    -- fallen below alphaMin; the kernel's goes on cooling. Here they are
+    -- the same, after every tick, so that several ticks made at once are
+    -- the ticks made one at a time.
+    oneTick simulation = do
+      after <- Wasm.step simulation
+      Ref.modify_ (_ + 1) ticks
+      setup <- Ref.read current
+      cooledTo <- Wasm.getAlpha simulation
+      when (cooledTo < (Setup.getParams setup).alphaMin && cooledTo /= 0.0) do
+        Kernel.setAlpha simulation.wasmSim 0.0
+      pure after
+
   pure
     { engine: Rust
-    , step: do
-        simulation <- Ref.read held
-        after <- Wasm.step simulation
-        Ref.modify_ (_ + 1) ticks
-        -- The default engine's alpha is zero once it has fallen below
-        -- alphaMin; the kernel's goes on cooling. Here they are the same.
-        setup <- Ref.read current
-        cooledTo <- Wasm.getAlpha simulation
-        when (cooledTo < (Setup.getParams setup).alphaMin && cooledTo /= 0.0) do
-          Kernel.setAlpha simulation.wasmSim 0.0
-        pure after
+    , step: Ref.read held >>= oneTick
+    , advance: \count ->
+        if count <= 0 then handOut
+        else do
+          simulation <- Ref.read held
+          for_ (Array.range 1 count) \_ -> oneTick simulation
+          handOut
     , nodes: handOut
     , links: Ref.read kept
     , alpha: Ref.read held >>= Wasm.getAlpha
@@ -358,6 +414,15 @@ createRust firstSetup firstNodes firstLinks = do
             Ref.write changed.setup current
             simulation <- Ref.read held
             Wasm.retarget name target simulation
+    , reradius: \name radius -> do
+        setup <- Ref.read current
+        case reradiused name radius setup of
+          Nothing -> pure false
+          Just changed -> do
+            Ref.write changed.setup current
+            simulation <- Ref.read held
+            Wasm.reradius name radius simulation
+    , reheat: Ref.read held >>= Wasm.reheat
     , pin: \id at -> handOut >>= pinById id at
     , snapshot: do
         simulation <- Ref.read held

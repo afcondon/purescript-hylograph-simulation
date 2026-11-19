@@ -115,6 +115,44 @@ for (const [name, engine] of engines) {
     sim.free();
   }
 
+  // --- advance, reheat, reradius ------------------------------------------------
+  {
+    const one = make(engine, physics(), cloud(30), ring(30)), many = make(engine, physics(), cloud(30), ring(30));
+    for (let t = 0; t < 37; t++) one.step();
+    const together = many.advance(37)();
+    check(same(together, one.nodes()) && many.tick() === 37 && Object.is(many.alpha(), one.alpha()), `${name}: advance 37 is 37 steps, to the bit, and counts them`);
+    check(many.advance(0)() === many.nodes() && many.advance(-3)() === many.nodes() && many.tick() === 37, `${name}: advance by nothing, or by less, makes no tick`);
+    // past alphaMin, where the handle's alpha rule matters: 400 ticks cool below 0.001
+    for (let t = 0; t < 400; t++) one.step();
+    many.advance(400)();
+    check(same(many.nodes(), one.nodes()) && one.alpha() === 0 && many.alpha() === 0, `${name}: and still the same once alpha has fallen below alphaMin (both read 0)`);
+
+    const atRest = one.nodes(), ticksBefore = one.tick();
+    one.reheat();
+    check(one.alpha() === 1 && one.tick() === ticksBefore && same(one.nodes(), atRest) && one.cooled() === false, `${name}: reheat puts alpha back to 1 and changes nothing else`);
+    const moved = worst(one.step(), atRest);
+    check(moved > 0, `${name}: and the forces push again (a node moved ${moved.toExponential(1)} in the next tick)`);
+    one.free(); many.free();
+
+    const pair = () => [node(0, -1, 0, { r: 2 }), node(1, 1, 0, { r: 2 })];
+    const bump = Setup.setupWithParams('b')([build(Setup.collide('bump'), Setup.withRadius(Setup.dynamic((d) => d.r)))])(params({ alphaDecay: 0, alphaTarget: 1 }));
+    const sim = make(engine, bump, pair());
+    for (let t = 0; t < 200; t++) sim.step();
+    const small = Math.abs(sim.nodes()[1].x - sim.nodes()[0].x);
+    check(sim.reradius('nowhere')(() => 9)() === false, `${name}: reradius says no where the setup has no such force of that name`);
+    check(sim.reradius('bump')(() => 30)() === true, `${name}: and yes where it has`);
+    for (let t = 0; t < 200; t++) sim.step();
+    const large = Math.abs(sim.nodes()[1].x - sim.nodes()[0].x);
+    check(small >= 4 - 1e-3 && small < 60 && large >= 60 - 1e-3, `${name}: two nodes of radius 2 rest ${small.toFixed(3)} apart, and at radius 30, ${large.toFixed(3)}`);
+    const kept = sim.snapshot();
+    sim.reradius('bump')(() => 2)();
+    sim.restore(kept)();
+    for (let t = 0; t < 50; t++) sim.step();
+    const after = Math.abs(sim.nodes()[1].x - sim.nodes()[0].x);
+    check(after >= 60 - 1e-3, `${name}: a snapshot carries the radii it was taken with (${after.toFixed(3)} apart after a restore)`);
+    sim.free();
+  }
+
   // --- applySetup takes every parameter ------------------------------------------
   {
     const none = (extra) => Setup.setupWithParams('none')([])(params(extra));
