@@ -32,6 +32,8 @@ module Hylograph.ForceEngine.WASMEngine
   , defaultConfig
     -- * Initialization
   , initWasm
+  , installKernel
+  , module KernelModuleExport
   , isWasmReady
     -- * Simulation Lifecycle
   , create
@@ -65,6 +67,8 @@ import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Foreign.Object as Object
 import Hylograph.ForceEngine.WASM as WASM
+import Hylograph.ForceEngine.WASM (KernelModule)
+import Hylograph.ForceEngine.WASM (KernelModule) as KernelModuleExport
 import Hylograph.Scene.Engine (EngineAdapter)
 import Hylograph.Scene.Types (PositionMap, NodeRule)
 
@@ -137,6 +141,11 @@ defaultConfig =
 -- | Example: `initWasm "./pkg/force_kernel.js"`
 initWasm :: String -> Aff Unit
 initWasm = WASM.initWasm
+
+-- | Install a kernel module loaded by other means (see
+-- | `Hylograph.ForceEngine.WASM.installKernel`).
+installKernel :: KernelModule -> Effect Unit
+installKernel = WASM.installKernel
 
 -- | Check if WASM is initialized and ready
 isWasmReady :: Effect Boolean

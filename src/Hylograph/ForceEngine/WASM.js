@@ -33,6 +33,19 @@ export function initWasm_(wasmUrl) {
   };
 }
 
+// Install a module some other code has already instantiated (the namespace,
+// or any object with the loader's exports). Like initWasm_, the first module
+// installed stays.
+export function installKernel_(kernelModule) {
+  if (wasmModule) {
+    console.log('WASM already initialized');
+    return;
+  }
+  wasmModule = kernelModule;
+  WasmSimulation = kernelModule.Simulation;
+  console.log('WASM Force Engine initialized');
+}
+
 // Check if WASM is initialized
 export function isWasmReady_() {
   return wasmModule !== null;

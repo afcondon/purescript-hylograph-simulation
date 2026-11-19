@@ -50,6 +50,8 @@ module Hylograph.ForceEngine.Setup.WASM
 
     -- * Initialization
   , initWasm
+  , installKernel
+  , module KernelModuleExport
   , isWasmReady
 
     -- * Simulation Lifecycle
@@ -108,6 +110,8 @@ import Effect.Ref as Ref
 
 import Hylograph.ForceEngine.Core as Core
 import Hylograph.ForceEngine.WASM as FFI
+import Hylograph.ForceEngine.WASM (KernelModule)
+import Hylograph.ForceEngine.WASM (KernelModule) as KernelModuleExport
 import Hylograph.ForceEngine.Simulation (SimulationNode) as Exports
 import Hylograph.ForceEngine.Simulation (PositionMap, SimulationNode, interpolatePositionsInPlace_, pinNodesInPlace_, unpinNodesInPlace_)
 import Data.Either (Either(..))
@@ -168,6 +172,11 @@ type WASMSim r =
 -- | Initialize the WASM module. Call once at application startup.
 initWasm :: String -> Aff Unit
 initWasm = FFI.initWasm
+
+-- | Install a kernel module loaded by other means (see
+-- | `Hylograph.ForceEngine.WASM.installKernel`).
+installKernel :: KernelModule -> Effect Unit
+installKernel = FFI.installKernel
 
 -- | Check if WASM is initialized
 isWasmReady :: Effect Boolean

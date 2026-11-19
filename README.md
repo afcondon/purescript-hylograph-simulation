@@ -64,7 +64,7 @@ yet, name them in your workspace:
 ```yaml
 workspace:
   extraPackages:
-    hylograph-simulation: "1.0.0"
+    hylograph-simulation: "1.1.0"
     hylograph-forces: "0.1.0"
     hylograph-selection: "0.6.0"
 ```
@@ -76,6 +76,19 @@ default engine needs nothing loaded. To use `engine: WASM` (or
 (`wasm-pack build --target web`; its README has the steps), serve the
 resulting `pkg/` directory beside your page, and call `initWasm` with the URL
 of `force_kernel.js` before creating a simulation.
+
+Since 1.1.0 there is a second way in, `installKernel :: KernelModule ->
+Effect Unit` (in `Hylograph.ForceEngine.WASM`, and re-exported by
+`Hylograph.Simulation`, `Hylograph.Simulation.Stepped`,
+`Hylograph.ForceEngine.Setup.WASM` and `Hylograph.ForceEngine.WASMEngine`).
+It takes a module that something else has already loaded and instantiated,
+and afterwards everything that works after `initWasm` works. The package
+`hylograph-wasm-kernel` (1.0.0, not yet published) uses it to carry the module
+inside a PureScript package, so that nothing has to be built or served:
+`Hylograph.Kernel.WASM.install` decodes the bytes it carries and installs
+them. This package does not depend on that one, so the default engine still
+costs nothing. Whichever function runs first wins: once a module is
+installed, `initWasm` and `installKernel` both do nothing.
 
 ## No D3
 

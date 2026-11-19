@@ -36,7 +36,7 @@
 -- | engines (it is the default engine's rule; the kernel alone would go on
 -- | cooling), so a force scaled by alpha has then stopped altogether.
 -- |
--- | The Rust engine needs `initWasm` first, and `free` when done with. The
+-- | The Rust engine needs `initWasm` (or `installKernel`) first, and `free` when done with. The
 -- | two engines compute the same rules, the default one in f64 and the Rust
 -- | one in f32, so they agree to float width over a tick and drift apart
 -- | after that, as any two roundings of a force layout do.
@@ -49,6 +49,8 @@ module Hylograph.Simulation.Stepped
   , Point
   , create
   , initWasm
+  , installKernel
+  , module KernelModuleExport
   , snapshotTick
   , snapshotNodes
   , snapshotLinks
@@ -73,6 +75,8 @@ import Hylograph.ForceEngine.Setup.WASM as Wasm
 import Hylograph.ForceEngine.Simulation (SimulationNode)
 import Hylograph.ForceEngine.Simulation as Default
 import Hylograph.ForceEngine.WASM as Kernel
+import Hylograph.ForceEngine.WASM (KernelModule)
+import Hylograph.ForceEngine.WASM (KernelModule) as KernelModuleExport
 import Hylograph.Forces.Measure as Measure
 import Hylograph.Forces.Node (writePin)
 import Hylograph.Forces.Snapshot as Kept
@@ -177,6 +181,11 @@ snapshotAlpha (Snapshot recorded) = recorded.alpha
 -- | Load the Rust kernel (once, before `create Rust`).
 initWasm :: String -> Aff Unit
 initWasm = Wasm.initWasm
+
+-- | Install a kernel module loaded by other means instead (once, before
+-- | `create Rust`); `hylograph-wasm-kernel` makes one from bytes it carries.
+installKernel :: KernelModule -> Effect Unit
+installKernel = Wasm.installKernel
 
 -- | A simulation of these nodes and links under this setup. The nodes are
 -- | copied; links name their ends by node `id`. Throws if the setup has a

@@ -62,6 +62,8 @@ module Hylograph.Simulation
 
     -- * WASM Initialization
   , initWASM
+  , installKernel
+  , module KernelModuleExport
 
     -- * Re-exports for convenience
   , module SetupExports
@@ -119,6 +121,8 @@ import Hylograph.ForceEngine.Setup (GUPResult, GUPLinkResult)
 
 -- WASM Force Engine
 import Hylograph.ForceEngine.Setup.WASM as WASMSetup
+import Hylograph.ForceEngine.WASM (KernelModule)
+import Hylograph.ForceEngine.WASM (KernelModule) as KernelModuleExport
 
 -- Node type re-export
 import Hylograph.ForceEngine.Simulation (SimulationNode) as SimNodeExports
@@ -135,7 +139,8 @@ type PositionMap = ForceSim.PositionMap
 -- | - `Pure`: the default. `hylograph-forces`: d3-force's forces bit for
 -- |   bit and the Rust kernel's additions, in PureScript. Nothing to load,
 -- |   no D3.
--- | - `WASM`: the Rust/WASM kernel, the fast path. Needs `initWASM` first.
+-- | - `WASM`: the Rust/WASM kernel, the fast path. Needs `initWASM` (or
+-- |   `installKernel`) first.
 -- | - `D3`: deprecated, and the same as `Pure`. It is kept so that code
 -- |   written when the default engine drove d3-force's functions still
 -- |   compiles; there is no D3 behind it any more.
@@ -216,6 +221,12 @@ type SimulationHandle r =
 -- | Example: `initWASM "./pkg/force_kernel.js"`
 initWASM :: String -> Aff Unit
 initWASM = WASMSetup.initWasm
+
+-- | Install a kernel module loaded by other means instead of `initWASM`
+-- | (`hylograph-wasm-kernel` makes one from bytes it carries). If a module
+-- | is already installed, this does nothing.
+installKernel :: KernelModule -> Effect Unit
+installKernel = WASMSetup.installKernel
 
 -- =============================================================================
 -- Main Entry Point
