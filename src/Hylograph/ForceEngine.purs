@@ -1,7 +1,7 @@
 -- | Pure Force Engine
 -- |
 -- | A clean, debuggable force simulation engine. The forces are PureScript
--- | (`hylograph-forces-pure`: d3-force's, bit for bit, and more); the loop is
+-- | (`hylograph-forces`: d3-force's, bit for bit, and more); the loop is
 -- | this library's own. There is no D3 in it.
 -- |
 -- | What that buys over d3.forceSimulation:

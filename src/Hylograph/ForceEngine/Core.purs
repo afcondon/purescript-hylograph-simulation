@@ -3,7 +3,7 @@
 -- | The simulation loop's parts: forces, the position update, cooling, the
 -- | animation frame and dragging.
 -- |
--- | The forces are `hylograph-forces-pure`: d3-force's seven and the Rust
+-- | The forces are `hylograph-forces`: d3-force's seven and the Rust
 -- | kernel's additions, in PureScript, with no D3 anywhere. A force is made in
 -- | two steps, because a simulation is usually described before its nodes
 -- | exist:
@@ -71,13 +71,13 @@ import Data.Either (Either(..))
 import Data.Traversable (for_)
 import Effect (Effect)
 import Hylograph.ForceEngine.Types (ManyBodyConfig, CollideConfig, LinkConfig, CenterConfig, ForceXConfig, ForceYConfig, RadialConfig)
-import Hylograph.Forces.Pure as Pure
-import Hylograph.Forces.Pure.Group (ungrouped)
-import Hylograph.Forces.Pure.Link as PureLink
-import Hylograph.Forces.Pure.ManyBody (everyPair)
-import Hylograph.Forces.Pure.Node as PureNode
-import Hylograph.Forces.Pure.Random as Random
-import Hylograph.Forces.Pure.Tick as Tick
+import Hylograph.Forces as Pure
+import Hylograph.Forces.Group (ungrouped)
+import Hylograph.Forces.Link as PureLink
+import Hylograph.Forces.ManyBody (everyPair)
+import Hylograph.Forces.Node as PureNode
+import Hylograph.Forces.Random as Random
+import Hylograph.Forces.Tick as Tick
 import Hylograph.Interaction.Pointer as Pointer
 import Web.DOM.Element (Element)
 

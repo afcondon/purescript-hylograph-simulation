@@ -1,7 +1,7 @@
 {
   "name": "purescript-hylograph-simulation",
   "version": "0.6.0",
-  "description": "Force simulation for Hylograph: the library's own loop over forces written in PureScript (hylograph-forces-pure), or a Rust/WASM kernel. No D3.",
+  "description": "Force simulation for Hylograph: the library's own loop over forces written in PureScript (hylograph-forces), or a Rust/WASM kernel. No D3.",
   "private": true,
   "type": "module",
   "repository": {

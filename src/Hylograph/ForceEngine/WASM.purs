@@ -95,6 +95,9 @@ module Hylograph.ForceEngine.WASM
   , addCohesion
   , setForceGroups
   , setManyBodyScope
+  , setRectCollidePairs
+  , setRectCollideThrough
+  , setDirectionalHard
   , addDirectional
   , setForceGaps
     -- * Snapshot, restore, convergence
@@ -262,6 +265,9 @@ foreign import setForceRegions_ :: EffectFn3 WASMSimulation ForceId (Array Int) 
 foreign import addCohesion_ :: EffectFn2 WASMSimulation Number ForceId
 foreign import setForceGroups_ :: EffectFn3 WASMSimulation ForceId (Array Int) Boolean
 foreign import setManyBodyScope_ :: EffectFn3 WASMSimulation ForceId Int Boolean
+foreign import setRectCollidePairs_ :: EffectFn3 WASMSimulation ForceId Int Boolean
+foreign import setRectCollideThrough_ :: EffectFn3 WASMSimulation ForceId Boolean Boolean
+foreign import setDirectionalHard_ :: EffectFn3 WASMSimulation ForceId Boolean Boolean
 foreign import addDirectional_ :: EffectFn6 WASMSimulation Number Number Number Number Int ForceId
 foreign import setForceGaps_ :: EffectFn3 WASMSimulation ForceId (Array Number) Boolean
 foreign import snapshot_ :: EffectFn1 WASMSimulation Snapshot
@@ -576,6 +582,24 @@ setManyBodyScope sim force scope = runEffectFn3 setManyBodyScope_ sim force case
   AllPairs -> 0
   WithinGroups -> 1
   BetweenGroups -> 2
+
+-- | Restrict a rectangle collision to pairs within a group, or between
+-- | groups (the groups from `setForceGroups`; a filter from
+-- | `setCollideFilter`).
+setRectCollidePairs :: WASMSimulation -> ForceId -> ManyBodyScope -> Effect Boolean
+setRectCollidePairs sim force scope = runEffectFn3 setRectCollidePairs_ sim force case scope of
+  AllPairs -> 0
+  WithinGroups -> 1
+  BetweenGroups -> 2
+
+-- | Let a rectangle pushed from both sides go through one of them.
+setRectCollideThrough :: WASMSimulation -> ForceId -> Boolean -> Effect Boolean
+setRectCollideThrough = runEffectFn3 setRectCollideThrough_
+
+-- | Make a directional constraint project its links after each tick, so
+-- | that the gap asked for is the gap kept.
+setDirectionalHard :: WASMSimulation -> ForceId -> Boolean -> Effect Boolean
+setDirectionalHard = runEffectFn3 setDirectionalHard_
 
 -- | Add a directional link constraint: each link's target is pushed to be
 -- | at least `gap` beyond its source along `axis` (which need not be a unit

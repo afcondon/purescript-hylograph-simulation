@@ -527,6 +527,19 @@ export function setManyBodyScope_(sim, force, scope) {
   return sim.set_many_body_scope(force, scope);
 }
 
+// 0 = every pair, 1 = within groups, 2 = between groups
+export function setRectCollidePairs_(sim, force, pairs) {
+  return sim.set_rect_collide_pairs(force, pairs);
+}
+
+export function setRectCollideThrough_(sim, force, through) {
+  return sim.set_rect_collide_through(force, through);
+}
+
+export function setDirectionalHard_(sim, force, hard) {
+  return sim.set_directional_hard(force, hard);
+}
+
 export function addDirectional_(sim, gap, axisX, axisY, strength, iterations) {
   return sim.add_directional(gap, axisX, axisY, strength, iterations);
 }

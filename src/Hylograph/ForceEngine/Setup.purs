@@ -33,7 +33,7 @@
 -- | `contain`, `cohesion`, `directional`), nor is a many-body force scoped
 -- | by group, nor a collision with a filter or scaled by alpha. Both engines
 -- | run all of them: `applySetup` here is the default engine
--- | (`hylograph-forces-pure`, PureScript, no D3), and
+-- | (`hylograph-forces`, PureScript, no D3), and
 -- | `Hylograph.ForceEngine.Setup.WASM.applySetup` is the Rust/WASM kernel.
 module Hylograph.ForceEngine.Setup
   ( -- * Value Types (static or dynamic)
@@ -94,6 +94,7 @@ module Hylograph.ForceEngine.Setup
   , withAlphaScaling
   , withHalfWidth
   , withHalfHeight
+  , withThroughSqueeze
   , withRegions
   , withRegion
   , withHardLimit
@@ -166,11 +167,13 @@ import Effect.Exception (throw)
 import Effect.Ref as Ref
 import Hylograph.ForceEngine.Core as Core
 import Hylograph.ForceEngine.Simulation (Simulation, SimulationNode, NodeID)
-import Hylograph.Forces.Pure as Pure
-import Hylograph.Forces.Pure.Contain as PureContain
-import Hylograph.Forces.Pure.Group as PureGroup
-import Hylograph.Forces.Pure.Link as PureLink
-import Hylograph.Forces.Pure.ManyBody as PureManyBody
+import Hylograph.Forces as Pure
+import Hylograph.Forces.Contain as PureContain
+import Hylograph.Forces.Node as PureNode
+import Hylograph.Forces.RectCollide as PureRectCollide
+import Hylograph.Forces.Group as PureGroup
+import Hylograph.Forces.Link as PureLink
+import Hylograph.Forces.ManyBody as PureManyBody
 
 -- =============================================================================
 -- Value Type (static, or computed per node / per link)
@@ -313,18 +316,37 @@ type TowardsConfig node =
 
 -- | Axis-aligned rectangles (for labels) that must not
 -- | overlap: an overlapping pair is pushed apart along the axis on which it
--- | overlaps least, the larger rectangle moving less.
+-- | overlaps least, the larger rectangle moving less. A pinned rectangle
+-- | (`fx`, `fy`) is never moved, and what overlaps it takes the whole push.
+-- |
+-- | A node the filter leaves out collides with nothing. `scope` restricts
+-- | the pairs by group: only two nodes of the same group, or only two nodes
+-- | not of the same group (labels against dots, say, and not each other).
+-- |
+-- | `throughSqueeze`: a rectangle pushed from both sides on an axis goes
+-- | through one of them instead of staying where the pushes cancel (the way
+-- | it is already moving, else with the stronger side). That is what
+-- | resolves crowded wide rectangles, and it wants nothing else pressing
+-- | them together: under a pull that does not die away, a rectangle is
+-- | walked through its neighbour. The rule in full is on
+-- | `Hylograph.Forces.RectCollide`.
 type RectCollideConfig node =
   { name :: String
   , halfWidth :: Value node Number
   , halfHeight :: Value node Number
   , strength :: Number
   , iterations :: Int
+  , filter :: Maybe (node -> Boolean)
+  , scope :: ManyBodyScope node
+  , throughSqueeze :: Boolean
   }
 
 -- | Keep nodes inside regions. Each node is confined to
--- | `regions !! i` where `region node == Just i` (`Nothing`: free), staying
--- | `radius` inside the boundary. `strength` (0 to 1) steers a node that is
+-- | `regions !! i` where `region node == Just i` (`Nothing`: free). What is
+-- | kept inside is the node's body: a rectangle of `halfWidth` by
+-- | `halfHeight` grown all round by `radius` (a circle when the half-extents
+-- | are 0, as they are by default; in a circular region a rectangle counts
+-- | as the circle round it). `strength` (0 to 1) steers a node that is
 -- | about to leave back toward the nearest allowed point; `hard` also clamps
 -- | positions into the region after each tick, so that no node is ever
 -- | drawn outside.
@@ -333,6 +355,8 @@ type ContainConfig node =
   , regions :: Array Region
   , region :: node -> Maybe Int
   , radius :: Value node Number
+  , halfWidth :: Value node Number
+  , halfHeight :: Value node Number
   , strength :: Number
   , hard :: Boolean
   }
@@ -356,12 +380,20 @@ type CohesionConfig node =
 -- | Over the simulation's links: push each link's target
 -- | to be at least `gap` beyond its source along `axis` (children below
 -- | parents, with axis (0, 1)). Links already that far apart are left alone.
+-- |
+-- | As a force it is scaled by alpha and shared with everything else that
+-- | pushes, so the gap it leaves can be well short of the one asked for.
+-- | With `hard` the links are also projected after each tick, so that the
+-- | gap asked for is the gap kept: a link short of its gap moves its target
+-- | along the axis by the shortfall (its source back, if the target is
+-- | pinned and the source is not).
 type DirectionalConfig node =
   { name :: String
   , gap :: Value (LinkEnds node) Number
   , axis :: { x :: Number, y :: Number }
   , strength :: Value (LinkEnds node) Number
   , iterations :: Int
+  , hard :: Boolean
   }
 
 -- | Force type enumeration
@@ -467,33 +499,43 @@ towards :: forall node. String -> (node -> Maybe { x :: Number, y :: Number }) -
 towards name target = TowardsForce { name, target, strength: Static 0.1, filter: Nothing }
 
 -- | Create a rectangle collision force.
--- | Default: half-width 1, half-height 1, strength 1, 1 iteration.
+-- | Default: half-width 1, half-height 1, strength 1, 1 iteration, every
+-- | pair, a squeezed rectangle stays put.
 rectCollide :: forall node. String -> ForceConfig node
 rectCollide name = RectCollideForce
-  { name, halfWidth: Static 1.0, halfHeight: Static 1.0, strength: 1.0, iterations: 1 }
+  { name
+  , halfWidth: Static 1.0
+  , halfHeight: Static 1.0
+  , strength: 1.0
+  , iterations: 1
+  , filter: Nothing
+  , scope: AllPairs
+  , throughSqueeze: false
+  }
 
 -- | Create a containment force keeping every node in one region. Default: radius 0, strength 1, with the hard limit on. For
 -- | several regions use `withRegions` and `withRegion`.
 contain :: forall node. String -> Region -> ForceConfig node
 contain name region = ContainForce
-  { name, regions: [ region ], region: const (Just 0), radius: Static 0.0, strength: 1.0, hard: true }
+  { name, regions: [ region ], region: const (Just 0), radius: Static 0.0, halfWidth: Static 0.0, halfHeight: Static 0.0, strength: 1.0, hard: true }
 
 -- | Create a containment force keeping each node in a region of its own:
 -- | node `n` in `regions !! i` where `region n == Just i`, and
 -- | free where it is `Nothing`. Defaults as `contain`.
 containEach :: forall node. String -> Array Region -> (node -> Maybe Int) -> ForceConfig node
 containEach name regions region = ContainForce
-  { name, regions, region, radius: Static 0.0, strength: 1.0, hard: true }
+  { name, regions, region, radius: Static 0.0, halfWidth: Static 0.0, halfHeight: Static 0.0, strength: 1.0, hard: true }
 
 -- | Create a group cohesion force. Default: strength 0.1.
 cohesion :: forall node. String -> (node -> Maybe Int) -> ForceConfig node
 cohesion name group = CohesionForce { name, group, strength: Static 0.1, filter: Nothing }
 
 -- | Create a directional link constraint.
--- | Default: gap 30 along (0, 1) (targets below sources), strength 1.
+-- | Default: gap 30 along (0, 1) (targets below sources), strength 1, soft
+-- | (`withHardLimit true` makes the gap exact).
 directional :: forall node. String -> ForceConfig node
 directional name = DirectionalForce
-  { name, gap: Static 30.0, axis: { x: 0.0, y: 1.0 }, strength: Static 1.0, iterations: 1 }
+  { name, gap: Static 30.0, axis: { x: 0.0, y: 1.0 }, strength: Static 1.0, iterations: 1, hard: false }
 
 -- =============================================================================
 -- Force Modifiers (fluent API)
@@ -617,12 +659,13 @@ withDistanceMax v = case _ of
 
 -- | Add a filter predicate: the force only applies to matching nodes.
 -- | For ManyBody (a filtered-out node exerts no charge but is still pushed),
--- | Collide (a filtered-out node collides with nothing),
+-- | Collide and RectCollide (a filtered-out node collides with nothing),
 -- | PositionX, PositionY, Radial, Towards and Cohesion.
 withFilter :: forall node. (node -> Boolean) -> ForceConfig node -> ForceConfig node
 withFilter pred = case _ of
   ManyBodyForce c -> ManyBodyForce c { filter = Just pred }
   CollideForce c -> CollideForce c { filter = Just pred }
+  RectCollideForce c -> RectCollideForce c { filter = Just pred }
   PositionXForce c -> PositionXForce c { filter = Just pred }
   PositionYForce c -> PositionYForce c { filter = Just pred }
   RadialForce c -> RadialForce c { filter = Just pred }
@@ -643,16 +686,27 @@ withTarget target = case _ of
   TowardsForce c -> TowardsForce c { target = target }
   other -> other
 
--- | Set the rectangles' half-width (for RectCollide)
+-- | Set the rectangles' half-width (for RectCollide; the half-width of the
+-- | node's body for Contain)
 withHalfWidth :: forall node. Value node Number -> ForceConfig node -> ForceConfig node
 withHalfWidth v = case _ of
   RectCollideForce c -> RectCollideForce c { halfWidth = v }
+  ContainForce c -> ContainForce c { halfWidth = v }
   other -> other
 
--- | Set the rectangles' half-height (for RectCollide)
+-- | Set the rectangles' half-height (for RectCollide; the half-height of
+-- | the node's body for Contain)
 withHalfHeight :: forall node. Value node Number -> ForceConfig node -> ForceConfig node
 withHalfHeight v = case _ of
   RectCollideForce c -> RectCollideForce c { halfHeight = v }
+  ContainForce c -> ContainForce c { halfHeight = v }
+  other -> other
+
+-- | Let a rectangle that is pushed from both sides go through one of them
+-- | (for RectCollide). Off by default. See `RectCollideConfig`.
+withThroughSqueeze :: forall node. Boolean -> ForceConfig node -> ForceConfig node
+withThroughSqueeze through = case _ of
+  RectCollideForce c -> RectCollideForce c { throughSqueeze = through }
   other -> other
 
 -- | Set the regions (for Contain); `withRegion` says which node is in which
@@ -668,11 +722,14 @@ withRegion region = case _ of
   ContainForce c -> ContainForce c { region = region }
   other -> other
 
--- | Turn the clamp after each tick on or off (for Contain). Off, the region
--- | is a soft boundary that nodes can be pushed across for a while.
+-- | Turn the correction after each tick on or off. For Contain it is the
+-- | clamp into the region (off, the region only steers); for Directional it
+-- | is the projection that makes the gap exact (off, the default there, the
+-- | gap is only pushed towards).
 withHardLimit :: forall node. Boolean -> ForceConfig node -> ForceConfig node
 withHardLimit hard = case _ of
   ContainForce c -> ContainForce c { hard = hard }
+  DirectionalForce c -> DirectionalForce c { hard = hard }
   other -> other
 
 -- | Set each node's group (for Cohesion)
@@ -681,16 +738,19 @@ withGroup group = case _ of
   CohesionForce c -> CohesionForce c { group = group }
   other -> other
 
--- | Restrict a ManyBody force to pairs of nodes in the same group
+-- | Restrict a ManyBody or RectCollide force to pairs of nodes in the same group
 withinGroups :: forall node. (node -> Maybe Int) -> ForceConfig node -> ForceConfig node
 withinGroups group = case _ of
   ManyBodyForce c -> ManyBodyForce c { scope = WithinGroups group }
+  RectCollideForce c -> RectCollideForce c { scope = WithinGroups group }
   other -> other
 
--- | Restrict a ManyBody force to pairs of nodes in different groups
+-- | Restrict a ManyBody or RectCollide force to pairs of nodes in different
+-- | groups (a node in no group is in a different group from everyone)
 betweenGroups :: forall node. (node -> Maybe Int) -> ForceConfig node -> ForceConfig node
 betweenGroups group = case _ of
   ManyBodyForce c -> ManyBodyForce c { scope = BetweenGroups group }
+  RectCollideForce c -> RectCollideForce c { scope = BetweenGroups group }
   other -> other
 
 -- | Set the gap each link's target must be beyond its source, per link if
@@ -1009,6 +1069,18 @@ recipe = case _ of
       , halfHeight: valueOf c.halfHeight
       , strength: c.strength
       , iterations: c.iterations
+      , include: fromMaybe (\_ -> true) c.filter
+      , pairs: case c.scope of
+          AllPairs -> PureRectCollide.everyPair
+          WithinGroups _ -> PureRectCollide.withinGroups
+          BetweenGroups _ -> PureRectCollide.betweenGroups
+      , group: case c.scope of
+          AllPairs -> \_ -> PureGroup.ungrouped
+          WithinGroups group -> membership group
+          BetweenGroups group -> membership group
+      , heldX: PureNode.pinnedX
+      , heldY: PureNode.pinnedY
+      , squeezed: if c.throughSqueeze then PureRectCollide.goesThrough else PureRectCollide.staysPut
       }
       nodes
 
@@ -1021,6 +1093,8 @@ recipe = case _ of
             Just region -> PureContain.within region
             Nothing -> PureContain.free
         , radius: valueOf c.radius
+        , halfWidth: valueOf c.halfWidth
+        , halfHeight: valueOf c.halfHeight
         , strength: c.strength
         , hard: c.hard
         }
@@ -1038,6 +1112,9 @@ recipe = case _ of
       , strength: \l -> valueOf c.strength l.ends
       , axis: c.axis
       , iterations: c.iterations
+      , hard: c.hard
+      , heldX: PureNode.pinnedX
+      , heldY: PureNode.pinnedY
       }
       nodes
       ended

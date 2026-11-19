@@ -606,12 +606,12 @@
   // output/Control.Monad/index.js
   var ap = function(dictMonad) {
     var bind4 = bind(dictMonad.Bind1());
-    var pure12 = pure(dictMonad.Applicative0());
+    var pure13 = pure(dictMonad.Applicative0());
     return function(f) {
       return function(a) {
         return bind4(f)(function(f$prime) {
           return bind4(a)(function(a$prime) {
-            return pure12(f$prime(a$prime));
+            return pure13(f$prime(a$prime));
           });
         });
       };
@@ -1091,17 +1091,17 @@
           }
         }
       }
-      function onComplete(join4) {
+      function onComplete(join3) {
         return function() {
           if (status === COMPLETED) {
-            rethrow = rethrow && join4.rethrow;
-            join4.handler(step2)();
+            rethrow = rethrow && join3.rethrow;
+            join3.handler(step2)();
             return function() {
             };
           }
           var jid = joinId++;
           joins = joins || {};
-          joins[jid] = join4;
+          joins[jid] = join3;
           return function() {
             if (joins !== null) {
               delete joins[jid];
@@ -1156,7 +1156,7 @@
           return canceler;
         };
       }
-      function join3(cb) {
+      function join2(cb) {
         return function() {
           var canceler = onComplete({
             rethrow: false,
@@ -1170,7 +1170,7 @@
       }
       return {
         kill,
-        join: join3,
+        join: join2,
         onComplete,
         isSuspended: function() {
           return status === SUSPENDED;
@@ -1253,7 +1253,7 @@
         }
         return kills2;
       }
-      function join3(result, head2, tail) {
+      function join2(result, head2, tail) {
         var fail, step2, lhs, rhs, tmp, kid;
         if (util.isLeft(result)) {
           fail = result;
@@ -1299,9 +1299,9 @@
                     if (tmp) {
                       tmp = false;
                     } else if (tail === null) {
-                      join3(fail, null, null);
+                      join2(fail, null, null);
                     } else {
-                      join3(fail, tail._1, tail._2);
+                      join2(fail, tail._1, tail._2);
                     }
                   };
                 });
@@ -1336,9 +1336,9 @@
                     if (tmp) {
                       tmp = false;
                     } else if (tail === null) {
-                      join3(step2, null, null);
+                      join2(step2, null, null);
                     } else {
-                      join3(step2, tail._1, tail._2);
+                      join2(step2, tail._1, tail._2);
                     }
                   };
                 });
@@ -1362,7 +1362,7 @@
           return function() {
             delete fibers[fiber._1];
             fiber._3 = result;
-            join3(result, fiber._2._1, fiber._2._2);
+            join2(result, fiber._2._1, fiber._2._2);
           };
         };
       }
@@ -1875,13 +1875,13 @@
   };
   var traverse_ = function(dictApplicative) {
     var applySecond2 = applySecond(dictApplicative.Apply0());
-    var pure12 = pure(dictApplicative);
+    var pure13 = pure(dictApplicative);
     return function(dictFoldable) {
       var foldr2 = foldr(dictFoldable);
       return function(f) {
         return foldr2(function($454) {
           return applySecond2(f($454));
-        })(pure12(unit));
+        })(pure13(unit));
       };
     };
   };
@@ -1988,13 +1988,13 @@
     }
     return function(apply14) {
       return function(map29) {
-        return function(pure12) {
+        return function(pure13) {
           return function(f) {
             return function(array) {
               function go2(bot, top2) {
                 switch (top2 - bot) {
                   case 0:
-                    return pure12([]);
+                    return pure13([]);
                   case 1:
                     return map29(array1)(f(array[bot]));
                   case 2:
@@ -2191,11 +2191,6 @@
   var log = function(s) {
     return function() {
       console.log(s);
-    };
-  };
-  var warn = function(s) {
-    return function() {
-      console.warn(s);
     };
   };
 
@@ -3166,6 +3161,11 @@
   var pi = 3.141592653589793;
   var fromString = function(str) {
     return fromStringImpl(str, isFiniteImpl, Just.create, Nothing.value);
+  };
+
+  // output/Data.Int/index.js
+  var odd = function(x) {
+    return (x & 1) !== 0;
   };
 
   // output/Data.FoldableWithIndex/index.js
@@ -4174,7 +4174,7 @@
     return coerce3(difference(dictOrd));
   };
 
-  // output/Hylograph.Forces.Pure.Node/foreign.js
+  // output/Hylograph.Forces.Node/foreign.js
   var writeVelocity = (node, vx, vy) => {
     node.vx = vx;
     node.vy = vy;
@@ -4187,7 +4187,33 @@
     node.index = index3;
   };
 
-  // output/Hylograph.Forces.Pure.Center/index.js
+  // output/Hylograph.Forces.Node/index.js
+  var pinnedY = function(node) {
+    var v = toMaybe(node.fy);
+    if (v instanceof Just) {
+      return true;
+    }
+    ;
+    if (v instanceof Nothing) {
+      return false;
+    }
+    ;
+    throw new Error("Failed pattern match at Hylograph.Forces.Node (line 63, column 16 - line 65, column 19): " + [v.constructor.name]);
+  };
+  var pinnedX = function(node) {
+    var v = toMaybe(node.fx);
+    if (v instanceof Just) {
+      return true;
+    }
+    ;
+    if (v instanceof Nothing) {
+      return false;
+    }
+    ;
+    throw new Error("Failed pattern match at Hylograph.Forces.Node (line 58, column 16 - line 60, column 19): " + [v.constructor.name]);
+  };
+
+  // output/Hylograph.Forces.Center/index.js
   var initialize = function(config) {
     return function(nodes) {
       return {
@@ -4223,7 +4249,7 @@
     };
   };
 
-  // output/Hylograph.Forces.Pure.Group/index.js
+  // output/Hylograph.Forces.Group/index.js
   var alter2 = /* @__PURE__ */ alter(ordInt);
   var fromFoldable5 = /* @__PURE__ */ fromFoldable(foldableList);
   var foldl3 = /* @__PURE__ */ foldl(foldableArray);
@@ -4262,7 +4288,7 @@
             return new Just(snoc(members.value0)(item));
           }
           ;
-          throw new Error("Failed pattern match at Hylograph.Forces.Pure.Group (line 39, column 22 - line 41, column 45): " + [members.constructor.name]);
+          throw new Error("Failed pattern match at Hylograph.Forces.Group (line 37, column 22 - line 39, column 45): " + [members.constructor.name]);
         };
       };
       var place = function(groups) {
@@ -4276,14 +4302,14 @@
             return alter2(add3(item))(v.value0)(groups);
           }
           ;
-          throw new Error("Failed pattern match at Hylograph.Forces.Pure.Group (line 35, column 23 - line 37, column 55): " + [v.constructor.name]);
+          throw new Error("Failed pattern match at Hylograph.Forces.Group (line 33, column 23 - line 35, column 55): " + [v.constructor.name]);
         };
       };
       return fromFoldable5(values(foldl3(place)(empty2)(items)));
     };
   };
 
-  // output/Hylograph.Forces.Pure.Cohesion/index.js
+  // output/Hylograph.Forces.Cohesion/index.js
   var map5 = /* @__PURE__ */ map(functorArray);
   var when3 = /* @__PURE__ */ when(applicativeEffect);
   var initialize2 = function(config) {
@@ -4337,7 +4363,7 @@
     };
   };
 
-  // output/Hylograph.Forces.Pure.Quadtree/index.js
+  // output/Hylograph.Forces.Quadtree/index.js
   var $runtime_lazy5 = function(name15, moduleName, init) {
     var state3 = 0;
     var val;
@@ -4421,7 +4447,7 @@
           return Empty.value;
         }
         ;
-        throw new Error("Failed pattern match at Hylograph.Forces.Pure.Quadtree (line 168, column 10 - line 170, column 19): " + [v.constructor.name]);
+        throw new Error("Failed pattern match at Hylograph.Forces.Quadtree (line 168, column 10 - line 170, column 19): " + [v.constructor.name]);
       };
     };
   };
@@ -4448,7 +4474,7 @@
           return others;
         }
         ;
-        throw new Error("Failed pattern match at Hylograph.Forces.Pure.Quadtree (line 156, column 26 - line 160, column 16): " + [others.constructor.name]);
+        throw new Error("Failed pattern match at Hylograph.Forces.Quadtree (line 156, column 26 - line 160, column 16): " + [others.constructor.name]);
       }
       ;
       while (!$tco_done) {
@@ -4556,7 +4582,7 @@
       return false;
     };
   };
-  var $lazy_cell = /* @__PURE__ */ $runtime_lazy5("cell", "Hylograph.Forces.Pure.Quadtree", function() {
+  var $lazy_cell = /* @__PURE__ */ $runtime_lazy5("cell", "Hylograph.Forces.Quadtree", function() {
     return function(newestFirst, x0, y0, x1, y1, points) {
       var turned = !newestFirst;
       var middleY = (y0 + y1) / 2;
@@ -4617,7 +4643,7 @@
                     return;
                   }
                   ;
-                  throw new Error("Failed pattern match at Hylograph.Forces.Pure.Quadtree (line 122, column 62 - line 135, column 78): " + [remaining.constructor.name]);
+                  throw new Error("Failed pattern match at Hylograph.Forces.Quadtree (line 122, column 62 - line 135, column 78): " + [remaining.constructor.name]);
                 }
                 ;
                 while (!$tco_done) {
@@ -4643,7 +4669,7 @@
         return deal(points)(Nil.value)(Nil.value)(Nil.value)(Nil.value);
       }
       ;
-      throw new Error("Failed pattern match at Hylograph.Forces.Pure.Quadtree (line 137, column 5 - line 141, column 41): " + [points.constructor.name]);
+      throw new Error("Failed pattern match at Hylograph.Forces.Quadtree (line 137, column 5 - line 141, column 41): " + [points.constructor.name]);
     };
   });
   var cell = /* @__PURE__ */ $lazy_cell(115);
@@ -4734,7 +4760,7 @@
                     return;
                   }
                   ;
-                  throw new Error("Failed pattern match at Hylograph.Forces.Pure.Quadtree (line 62, column 39 - line 76, column 47): " + [remaining.constructor.name]);
+                  throw new Error("Failed pattern match at Hylograph.Forces.Quadtree (line 62, column 39 - line 76, column 47): " + [remaining.constructor.name]);
                 }
                 ;
                 while (!$tco_done) {
@@ -4751,7 +4777,7 @@
     return survey(newestFirst)(Nil.value)(infinity)(infinity)(-infinity)(-infinity);
   };
 
-  // output/Hylograph.Forces.Pure.Random/index.js
+  // output/Hylograph.Forces.Random/index.js
   var multiplier = 1664525;
   var modulus = 4294967296;
   var jiggle = function(v) {
@@ -4772,7 +4798,7 @@
     };
   };
 
-  // output/Hylograph.Forces.Pure.Collide/index.js
+  // output/Hylograph.Forces.Collide/index.js
   var $runtime_lazy6 = function(name15, moduleName, init) {
     var state3 = 0;
     var val;
@@ -4908,7 +4934,7 @@
             return;
           }
           ;
-          throw new Error("Failed pattern match at Hylograph.Forces.Pure.Collide (line 254, column 11 - line 266, column 28): " + [region.value7.constructor.name]);
+          throw new Error("Failed pattern match at Hylograph.Forces.Collide (line 254, column 11 - line 266, column 28): " + [region.value7.constructor.name]);
         }
         ;
         if (region instanceof Finished) {
@@ -4916,7 +4942,7 @@
           return Finished.value;
         }
         ;
-        throw new Error("Failed pattern match at Hylograph.Forces.Pure.Collide (line 249, column 17 - line 267, column 27): " + [region.constructor.name]);
+        throw new Error("Failed pattern match at Hylograph.Forces.Collide (line 249, column 17 - line 267, column 27): " + [region.constructor.name]);
       }
       ;
       while (!$tco_done) {
@@ -4955,9 +4981,9 @@
         return radius;
       }
       ;
-      throw new Error("Failed pattern match at Hylograph.Forces.Pure.Collide (line 187, column 10 - line 189, column 25): " + [region.constructor.name]);
+      throw new Error("Failed pattern match at Hylograph.Forces.Collide (line 187, column 10 - line 189, column 25): " + [region.constructor.name]);
     };
-    var $lazy_thread = $runtime_lazy6("thread", "Hylograph.Forces.Pure.Collide", function() {
+    var $lazy_thread = $runtime_lazy6("thread", "Hylograph.Forces.Collide", function() {
       return function(tree, x0, y0, x1, y1, after) {
         if (tree instanceof Empty) {
           return after;
@@ -4978,7 +5004,7 @@
           return new Region(radius, x0, y0, x1, y1, first, after, Unoccupied.value);
         }
         ;
-        throw new Error("Failed pattern match at Hylograph.Forces.Pure.Collide (line 160, column 45 - line 176, column 57): " + [tree.constructor.name]);
+        throw new Error("Failed pattern match at Hylograph.Forces.Collide (line 160, column 45 - line 176, column 57): " + [tree.constructor.name]);
       };
     });
     var thread = $lazy_thread(159);
@@ -5143,7 +5169,7 @@
           return false;
         }
         ;
-        throw new Error("Failed pattern match at Hylograph.Forces.Pure.Collide (line 313, column 7 - line 318, column 21): " + [remaining.constructor.name]);
+        throw new Error("Failed pattern match at Hylograph.Forces.Collide (line 313, column 7 - line 318, column 21): " + [remaining.constructor.name]);
       })()) {
       }
       ;
@@ -5193,7 +5219,7 @@
     };
   };
 
-  // output/Hylograph.Forces.Pure.Contain/index.js
+  // output/Hylograph.Forces.Contain/index.js
   var append2 = /* @__PURE__ */ append(semigroupArray);
   var foldl4 = /* @__PURE__ */ foldl(foldableArray);
   var map6 = /* @__PURE__ */ map(functorArray);
@@ -5342,53 +5368,64 @@
   };
   var pass2 = function($copy_edges) {
     return function($copy_radius) {
-      return function($copy_x) {
-        return function($copy_y) {
-          return function($copy_moved) {
-            var $tco_var_edges = $copy_edges;
-            var $tco_var_radius = $copy_radius;
-            var $tco_var_x = $copy_x;
-            var $tco_var_y = $copy_y;
-            var $tco_done = false;
-            var $tco_result;
-            function $tco_loop(edges, radius, x, y, moved) {
-              if (edges instanceof Nil) {
-                $tco_done = true;
-                return {
-                  x,
-                  y,
-                  moved
-                };
-              }
-              ;
-              if (edges instanceof Cons) {
-                var inside = (x - edges.value0.x) * edges.value0.normalX + (y - edges.value0.y) * edges.value0.normalY;
-                var $31 = inside < radius;
-                if ($31) {
-                  $tco_var_edges = edges.value1;
-                  $tco_var_radius = radius;
-                  $tco_var_x = x + edges.value0.normalX * (radius - inside);
-                  $tco_var_y = y + edges.value0.normalY * (radius - inside);
-                  $copy_moved = true;
-                  return;
+      return function($copy_halfWidth) {
+        return function($copy_halfHeight) {
+          return function($copy_x) {
+            return function($copy_y) {
+              return function($copy_moved) {
+                var $tco_var_edges = $copy_edges;
+                var $tco_var_radius = $copy_radius;
+                var $tco_var_halfWidth = $copy_halfWidth;
+                var $tco_var_halfHeight = $copy_halfHeight;
+                var $tco_var_x = $copy_x;
+                var $tco_var_y = $copy_y;
+                var $tco_done = false;
+                var $tco_result;
+                function $tco_loop(edges, radius, halfWidth, halfHeight, x, y, moved) {
+                  if (edges instanceof Nil) {
+                    $tco_done = true;
+                    return {
+                      x,
+                      y,
+                      moved
+                    };
+                  }
+                  ;
+                  if (edges instanceof Cons) {
+                    var reach = radius + abs(edges.value0.normalX) * halfWidth + abs(edges.value0.normalY) * halfHeight;
+                    var inside = (x - edges.value0.x) * edges.value0.normalX + (y - edges.value0.y) * edges.value0.normalY;
+                    var $31 = inside < reach;
+                    if ($31) {
+                      $tco_var_edges = edges.value1;
+                      $tco_var_radius = radius;
+                      $tco_var_halfWidth = halfWidth;
+                      $tco_var_halfHeight = halfHeight;
+                      $tco_var_x = x + edges.value0.normalX * (reach - inside);
+                      $tco_var_y = y + edges.value0.normalY * (reach - inside);
+                      $copy_moved = true;
+                      return;
+                    }
+                    ;
+                    $tco_var_edges = edges.value1;
+                    $tco_var_radius = radius;
+                    $tco_var_halfWidth = halfWidth;
+                    $tco_var_halfHeight = halfHeight;
+                    $tco_var_x = x;
+                    $tco_var_y = y;
+                    $copy_moved = moved;
+                    return;
+                  }
+                  ;
+                  throw new Error("Failed pattern match at Hylograph.Forces.Contain (line 171, column 52 - line 180, column 59): " + [edges.constructor.name]);
                 }
                 ;
-                $tco_var_edges = edges.value1;
-                $tco_var_radius = radius;
-                $tco_var_x = x;
-                $tco_var_y = y;
-                $copy_moved = moved;
-                return;
-              }
-              ;
-              throw new Error("Failed pattern match at Hylograph.Forces.Pure.Contain (line 161, column 31 - line 169, column 38): " + [edges.constructor.name]);
-            }
-            ;
-            while (!$tco_done) {
-              $tco_result = $tco_loop($tco_var_edges, $tco_var_radius, $tco_var_x, $tco_var_y, $copy_moved);
-            }
-            ;
-            return $tco_result;
+                while (!$tco_done) {
+                  $tco_result = $tco_loop($tco_var_edges, $tco_var_radius, $tco_var_halfWidth, $tco_var_halfHeight, $tco_var_x, $tco_var_y, $copy_moved);
+                }
+                ;
+                return $tco_result;
+              };
+            };
           };
         };
       };
@@ -5396,47 +5433,55 @@
   };
   var passes = function($copy_edges) {
     return function($copy_radius) {
-      return function($copy_remaining) {
-        return function($copy_x) {
-          return function($copy_y) {
-            var $tco_var_edges = $copy_edges;
-            var $tco_var_radius = $copy_radius;
-            var $tco_var_remaining = $copy_remaining;
-            var $tco_var_x = $copy_x;
-            var $tco_done = false;
-            var $tco_result;
-            function $tco_loop(edges, radius, remaining, x, y) {
-              var $34 = remaining <= 0;
-              if ($34) {
-                $tco_done = true;
-                return {
-                  x,
-                  y
-                };
-              }
-              ;
-              var after = pass2(edges)(radius)(x)(y)(false);
-              if (after.moved) {
-                $tco_var_edges = edges;
-                $tco_var_radius = radius;
-                $tco_var_remaining = remaining - 1 | 0;
-                $tco_var_x = after.x;
-                $copy_y = after.y;
-                return;
-              }
-              ;
-              $tco_done = true;
-              return {
-                x: after.x,
-                y: after.y
+      return function($copy_halfWidth) {
+        return function($copy_halfHeight) {
+          return function($copy_remaining) {
+            return function($copy_x) {
+              return function($copy_y) {
+                var $tco_var_edges = $copy_edges;
+                var $tco_var_radius = $copy_radius;
+                var $tco_var_halfWidth = $copy_halfWidth;
+                var $tco_var_halfHeight = $copy_halfHeight;
+                var $tco_var_remaining = $copy_remaining;
+                var $tco_var_x = $copy_x;
+                var $tco_done = false;
+                var $tco_result;
+                function $tco_loop(edges, radius, halfWidth, halfHeight, remaining, x, y) {
+                  var $34 = remaining <= 0;
+                  if ($34) {
+                    $tco_done = true;
+                    return {
+                      x,
+                      y
+                    };
+                  }
+                  ;
+                  var after = pass2(edges)(radius)(halfWidth)(halfHeight)(x)(y)(false);
+                  if (after.moved) {
+                    $tco_var_edges = edges;
+                    $tco_var_radius = radius;
+                    $tco_var_halfWidth = halfWidth;
+                    $tco_var_halfHeight = halfHeight;
+                    $tco_var_remaining = remaining - 1 | 0;
+                    $tco_var_x = after.x;
+                    $copy_y = after.y;
+                    return;
+                  }
+                  ;
+                  $tco_done = true;
+                  return {
+                    x: after.x,
+                    y: after.y
+                  };
+                }
+                ;
+                while (!$tco_done) {
+                  $tco_result = $tco_loop($tco_var_edges, $tco_var_radius, $tco_var_halfWidth, $tco_var_halfHeight, $tco_var_remaining, $tco_var_x, $copy_y);
+                }
+                ;
+                return $tco_result;
               };
-            }
-            ;
-            while (!$tco_done) {
-              $tco_result = $tco_loop($tco_var_edges, $tco_var_radius, $tco_var_remaining, $tco_var_x, $copy_y);
-            }
-            ;
-            return $tco_result;
+            };
           };
         };
       };
@@ -5447,6 +5492,14 @@
   };
   var initialize4 = function(config) {
     return function(nodes) {
+      var orZero = function(size5) {
+        var $37 = isNaNImpl(size5);
+        if ($37) {
+          return 0;
+        }
+        ;
+        return size5;
+      };
       var kept = function(node) {
         var v = config.region(node);
         if (v instanceof Free) {
@@ -5454,22 +5507,16 @@
         }
         ;
         if (v instanceof Within) {
-          var radius = config.radius(node);
           return new Just({
             node,
             region: v.value0,
-            radius: (function() {
-              var $38 = isNaNImpl(radius);
-              if ($38) {
-                return 0;
-              }
-              ;
-              return radius;
-            })()
+            radius: orZero(config.radius(node)),
+            halfWidth: orZero(config.halfWidth(node)),
+            halfHeight: orZero(config.halfHeight(node))
           });
         }
         ;
-        throw new Error("Failed pattern match at Hylograph.Forces.Pure.Contain (line 207, column 15 - line 213, column 76): " + [v.constructor.name]);
+        throw new Error("Failed pattern match at Hylograph.Forces.Contain (line 221, column 15 - line 230, column 10): " + [v.constructor.name]);
       };
       return {
         kept: catMaybes(map6(kept)(nodes)),
@@ -5481,12 +5528,12 @@
   var free = /* @__PURE__ */ (function() {
     return Free.value;
   })();
-  var confine = function(radius) {
+  var confine = function(inset) {
     return function(low2) {
       return function(high2) {
         return function(value12) {
-          var most = high2 - radius;
-          var least = low2 + radius;
+          var most = high2 - inset;
+          var least = low2 + inset;
           var $40 = least > most;
           if ($40) {
             return (low2 + high2) / 2;
@@ -5509,47 +5556,52 @@
   };
   var project = function(region) {
     return function(radius) {
-      return function(x) {
-        return function(y) {
-          if (region instanceof Rectangle) {
-            return {
-              x: confine(radius)(region.value0.x0)(region.value0.x1)(x),
-              y: confine(radius)(region.value0.y0)(region.value0.y1)(y)
-            };
-          }
-          ;
-          if (region instanceof Circle2) {
-            var offsetY = y - region.value0.y;
-            var offsetX = x - region.value0.x;
-            var inner = (function() {
-              var $45 = region.value0.radius - radius > 0;
-              if ($45) {
-                return region.value0.radius - radius;
+      return function(halfWidth) {
+        return function(halfHeight) {
+          return function(x) {
+            return function(y) {
+              if (region instanceof Rectangle) {
+                return {
+                  x: confine(radius + halfWidth)(region.value0.x0)(region.value0.x1)(x),
+                  y: confine(radius + halfHeight)(region.value0.y0)(region.value0.y1)(y)
+                };
               }
               ;
-              return 0;
-            })();
-            var distance2 = offsetX * offsetX + offsetY * offsetY;
-            var $46 = distance2 > inner * inner;
-            if ($46) {
-              var scale = inner / sqrt(distance2);
-              return {
-                x: region.value0.x + offsetX * scale,
-                y: region.value0.y + offsetY * scale
-              };
-            }
-            ;
-            return {
-              x,
-              y
+              if (region instanceof Circle2) {
+                var reach = region.value0.radius - radius - sqrt(halfWidth * halfWidth + halfHeight * halfHeight);
+                var offsetY = y - region.value0.y;
+                var offsetX = x - region.value0.x;
+                var inner = (function() {
+                  var $45 = reach > 0;
+                  if ($45) {
+                    return reach;
+                  }
+                  ;
+                  return 0;
+                })();
+                var distance2 = offsetX * offsetX + offsetY * offsetY;
+                var $46 = distance2 > inner * inner;
+                if ($46) {
+                  var scale = inner / sqrt(distance2);
+                  return {
+                    x: region.value0.x + offsetX * scale,
+                    y: region.value0.y + offsetY * scale
+                  };
+                }
+                ;
+                return {
+                  x,
+                  y
+                };
+              }
+              ;
+              if (region instanceof Polygon2) {
+                return passes(region.value0)(radius)(halfWidth)(halfHeight)(8)(x)(y);
+              }
+              ;
+              throw new Error("Failed pattern match at Hylograph.Forces.Contain (line 124, column 50 - line 141, column 66): " + [region.constructor.name]);
             };
-          }
-          ;
-          if (region instanceof Polygon2) {
-            return passes(region.value0)(radius)(8)(x)(y);
-          }
-          ;
-          throw new Error("Failed pattern match at Hylograph.Forces.Pure.Contain (line 115, column 29 - line 131, column 45): " + [region.constructor.name]);
+          };
         };
       };
     };
@@ -5557,7 +5609,7 @@
   var constrain = function(v) {
     return when5(v.hard)(foreachE(v.kept)(function(kept) {
       return when5(isFiniteImpl(kept.node.x) && isFiniteImpl(kept.node.y))((function() {
-        var allowed = project(kept.region)(kept.radius)(kept.node.x)(kept.node.y);
+        var allowed = project(kept.region)(kept.radius)(kept.halfWidth)(kept.halfHeight)(kept.node.x)(kept.node.y);
         return function __do2() {
           writeVelocity(kept.node, kept.node.vx + (allowed.x - kept.node.x), kept.node.vy + (allowed.y - kept.node.y));
           return writePosition(kept.node, allowed.x, allowed.y);
@@ -5581,7 +5633,7 @@
       var aheadY = kept.node.y + kept.node.vy;
       var aheadX = kept.node.x + kept.node.vx;
       return when5(isFiniteImpl(aheadX) && isFiniteImpl(aheadY))((function() {
-        var allowed = project(kept.region)(kept.radius)(aheadX)(aheadY);
+        var allowed = project(kept.region)(kept.radius)(kept.halfWidth)(kept.halfHeight)(aheadX)(aheadY);
         return function() {
           return writeVelocity(kept.node, kept.node.vx + (allowed.x - aheadX) * v.strength, kept.node.vy + (allowed.y - aheadY) * v.strength);
         };
@@ -5589,7 +5641,7 @@
     });
   };
 
-  // output/Hylograph.Forces.Pure.Linkage/index.js
+  // output/Hylograph.Forces.Linkage/index.js
   var when6 = /* @__PURE__ */ when(applicativeST);
   var map7 = /* @__PURE__ */ map(functorArray);
   var map12 = /* @__PURE__ */ map(functorEither);
@@ -5641,7 +5693,7 @@
     var fromFoldable11 = fromFoldable2(dictOrd)(foldableArray);
     var lookup4 = lookup(dictOrd);
     return function(dictShow) {
-      var show6 = show(dictShow);
+      var show5 = show(dictShow);
       return function(identify) {
         return function(nodes) {
           return function(links) {
@@ -5657,10 +5709,10 @@
               }
               ;
               if (v instanceof Nothing) {
-                return new Left("node not found: " + show6(id2));
+                return new Left("node not found: " + show5(id2));
               }
               ;
-              throw new Error("Failed pattern match at Hylograph.Forces.Pure.Linkage (line 72, column 13 - line 74, column 52): " + [v.constructor.name]);
+              throw new Error("Failed pattern match at Hylograph.Forces.Linkage (line 72, column 13 - line 74, column 52): " + [v.constructor.name]);
             };
             var placed = function(link) {
               var v = find3(link.source);
@@ -5682,10 +5734,10 @@
                   });
                 }
                 ;
-                throw new Error("Failed pattern match at Hylograph.Forces.Pure.Linkage (line 78, column 21 - line 80, column 53): " + [v1.constructor.name]);
+                throw new Error("Failed pattern match at Hylograph.Forces.Linkage (line 78, column 21 - line 80, column 53): " + [v1.constructor.name]);
               }
               ;
-              throw new Error("Failed pattern match at Hylograph.Forces.Pure.Linkage (line 76, column 17 - line 80, column 53): " + [v.constructor.name]);
+              throw new Error("Failed pattern match at Hylograph.Forces.Linkage (line 76, column 17 - line 80, column 53): " + [v.constructor.name]);
             };
             return map12(joinPlaces(nodes))(traverse2(placed)(links));
           };
@@ -5694,10 +5746,12 @@
     };
   };
 
-  // output/Hylograph.Forces.Pure.Directional/index.js
+  // output/Hylograph.Forces.Directional/index.js
   var map8 = /* @__PURE__ */ map(functorArray);
   var map13 = /* @__PURE__ */ map(functorEither);
   var when7 = /* @__PURE__ */ when(applicativeEffect);
+  var pure4 = /* @__PURE__ */ pure(applicativeEffect);
+  var passLimit = 32;
   var ordered = function(config) {
     return function(joined) {
       var usable = function(candidate) {
@@ -5730,9 +5784,15 @@
           ;
           return 1;
         })(),
-        iterations: config.iterations
+        iterations: config.iterations,
+        hard: config.hard,
+        heldX: config.heldX,
+        heldY: config.heldY
       };
     };
+  };
+  var isHard2 = function(v) {
+    return v.hard;
   };
   var initializeById = function(dictOrd) {
     var joinById2 = joinById(dictOrd);
@@ -5748,6 +5808,51 @@
         };
       };
     };
+  };
+  var constrain2 = function(v) {
+    var held = function(node) {
+      return v.axisX !== 0 && v.heldX(node) || v.axisY !== 0 && v.heldY(node);
+    };
+    return when7(v.hard)(function __do2() {
+      var moving = $$new(true)();
+      return forE(0)(passLimit)(function(v1) {
+        return function __do3() {
+          var wanted = read(moving)();
+          return when7(wanted)(function __do4() {
+            write(false)(moving)();
+            return foreachE(v.links)(function(link) {
+              var y = link.target.y - link.source.y;
+              var x = link.target.x - link.source.x;
+              var along = x * v.axisX + y * v.axisY;
+              return when7(isFiniteImpl(link.target.x) && (isFiniteImpl(link.target.y) && (isFiniteImpl(link.source.x) && (isFiniteImpl(link.source.y) && along < link.gap))))((function() {
+                var $$short = link.gap - along;
+                var stepX = v.axisX * $$short;
+                var stepY = v.axisY * $$short;
+                var $30 = !held(link.target);
+                if ($30) {
+                  return function __do5() {
+                    writeVelocity(link.target, link.target.vx + stepX, link.target.vy + stepY);
+                    writePosition(link.target, link.target.x + stepX, link.target.y + stepY);
+                    return write(true)(moving)();
+                  };
+                }
+                ;
+                var $31 = !held(link.source);
+                if ($31) {
+                  return function __do5() {
+                    writeVelocity(link.source, link.source.vx - stepX, link.source.vy - stepY);
+                    writePosition(link.source, link.source.x - stepX, link.source.y - stepY);
+                    return write(true)(moving)();
+                  };
+                }
+                ;
+                return pure4(unit);
+              })());
+            })();
+          })();
+        };
+      })();
+    });
   };
   var apply6 = function(v) {
     return function(alpha) {
@@ -5769,10 +5874,10 @@
     };
   };
 
-  // output/Hylograph.Forces.Pure.Link/index.js
+  // output/Hylograph.Forces.Link/index.js
   var min3 = /* @__PURE__ */ min(ordNumber);
   var map9 = /* @__PURE__ */ map(functorArray);
-  var pure4 = /* @__PURE__ */ pure(applicativeEffect);
+  var pure5 = /* @__PURE__ */ pure(applicativeEffect);
   var map14 = /* @__PURE__ */ map(functorEither);
   var FromDegree = /* @__PURE__ */ (function() {
     function FromDegree2() {
@@ -5814,7 +5919,7 @@
                 return config.strength.value0(end.link);
               }
               ;
-              throw new Error("Failed pattern match at Hylograph.Forces.Pure.Link (line 119, column 17 - line 121, column 46): " + [config.strength.constructor.name]);
+              throw new Error("Failed pattern match at Hylograph.Forces.Link (line 119, column 17 - line 121, column 46): " + [config.strength.constructor.name]);
             })(),
             bias: end.bias
           };
@@ -5840,7 +5945,7 @@
     return function(value12) {
       var $24 = value12 < 0 || value12 > 0;
       if ($24) {
-        return pure4(value12);
+        return pure5(value12);
       }
       ;
       return draw(random);
@@ -5886,7 +5991,7 @@
     };
   };
 
-  // output/Hylograph.Forces.Pure.ManyBody/index.js
+  // output/Hylograph.Forces.ManyBody/index.js
   var $runtime_lazy7 = function(name15, moduleName, init) {
     var state3 = 0;
     var val;
@@ -5901,25 +6006,25 @@
   };
   var map10 = /* @__PURE__ */ map(functorArray);
   var EveryPair = /* @__PURE__ */ (function() {
-    function EveryPair2() {
+    function EveryPair3() {
     }
     ;
-    EveryPair2.value = new EveryPair2();
-    return EveryPair2;
+    EveryPair3.value = new EveryPair3();
+    return EveryPair3;
   })();
   var WithinGroups = /* @__PURE__ */ (function() {
-    function WithinGroups4() {
+    function WithinGroups5() {
     }
     ;
-    WithinGroups4.value = new WithinGroups4();
-    return WithinGroups4;
+    WithinGroups5.value = new WithinGroups5();
+    return WithinGroups5;
   })();
   var BetweenGroups = /* @__PURE__ */ (function() {
-    function BetweenGroups4() {
+    function BetweenGroups5() {
     }
     ;
-    BetweenGroups4.value = new BetweenGroups4();
-    return BetweenGroups4;
+    BetweenGroups5.value = new BetweenGroups5();
+    return BetweenGroups5;
   })();
   var NoMembers = /* @__PURE__ */ (function() {
     function NoMembers2() {
@@ -5997,7 +6102,7 @@
       return 0;
     }
     ;
-    throw new Error("Failed pattern match at Hylograph.Forces.Pure.ManyBody (line 275, column 17 - line 281, column 18): " + [cluster.constructor.name]);
+    throw new Error("Failed pattern match at Hylograph.Forces.ManyBody (line 275, column 17 - line 281, column 18): " + [cluster.constructor.name]);
   };
   var strengthOf = function(cluster) {
     if (cluster instanceof Cluster) {
@@ -6008,7 +6113,7 @@
       return 0;
     }
     ;
-    throw new Error("Failed pattern match at Hylograph.Forces.Pure.ManyBody (line 289, column 22 - line 291, column 18): " + [cluster.constructor.name]);
+    throw new Error("Failed pattern match at Hylograph.Forces.ManyBody (line 289, column 22 - line 291, column 18): " + [cluster.constructor.name]);
   };
   var snapshot = function(bodies) {
     return function __do2() {
@@ -6135,7 +6240,7 @@
                         return;
                       }
                       ;
-                      throw new Error("Failed pattern match at Hylograph.Forces.Pure.ManyBody (line 443, column 24 - line 451, column 50): " + [remaining.constructor.name]);
+                      throw new Error("Failed pattern match at Hylograph.Forces.ManyBody (line 443, column 24 - line 451, column 50): " + [remaining.constructor.name]);
                     }
                     ;
                     while (!$tco_done) {
@@ -6208,7 +6313,7 @@
               })(map10(negated)(bodies));
             }
             ;
-            throw new Error("Failed pattern match at Hylograph.Forces.Pure.ManyBody (line 127, column 13 - line 130, column 86): " + [config.scope.constructor.name]);
+            throw new Error("Failed pattern match at Hylograph.Forces.ManyBody (line 127, column 13 - line 130, column 86): " + [config.scope.constructor.name]);
           })(),
           scope: config.scope,
           limits: {
@@ -6318,7 +6423,7 @@
                 };
               }
               ;
-              throw new Error("Failed pattern match at Hylograph.Forces.Pure.ManyBody (line 326, column 29 - line 357, column 35): " + [cluster.constructor.name]);
+              throw new Error("Failed pattern match at Hylograph.Forces.ManyBody (line 326, column 29 - line 357, column 35): " + [cluster.constructor.name]);
             }
             ;
             while (!$tco_done) {
@@ -6349,7 +6454,7 @@
       return 0;
     }
     ;
-    throw new Error("Failed pattern match at Hylograph.Forces.Pure.ManyBody (line 299, column 21 - line 301, column 18): " + [cluster.constructor.name]);
+    throw new Error("Failed pattern match at Hylograph.Forces.ManyBody (line 299, column 21 - line 301, column 18): " + [cluster.constructor.name]);
   };
   var centreXOf = function(cluster) {
     if (cluster instanceof Cluster) {
@@ -6360,7 +6465,7 @@
       return 0;
     }
     ;
-    throw new Error("Failed pattern match at Hylograph.Forces.Pure.ManyBody (line 294, column 21 - line 296, column 18): " + [cluster.constructor.name]);
+    throw new Error("Failed pattern match at Hylograph.Forces.ManyBody (line 294, column 21 - line 296, column 18): " + [cluster.constructor.name]);
   };
   var clusters = function(theta2) {
     return function(planted) {
@@ -6381,7 +6486,7 @@
               return;
             }
             ;
-            throw new Error("Failed pattern match at Hylograph.Forces.Pure.ManyBody (line 268, column 21 - line 270, column 58): " + [nodes.constructor.name]);
+            throw new Error("Failed pattern match at Hylograph.Forces.ManyBody (line 268, column 21 - line 270, column 58): " + [nodes.constructor.name]);
           }
           ;
           while (!$tco_done) {
@@ -6417,7 +6522,7 @@
               return;
             }
             ;
-            throw new Error("Failed pattern match at Hylograph.Forces.Pure.ManyBody (line 262, column 33 - line 264, column 90): " + [oldestFirst.constructor.name]);
+            throw new Error("Failed pattern match at Hylograph.Forces.ManyBody (line 262, column 33 - line 264, column 90): " + [oldestFirst.constructor.name]);
           }
           ;
           while (!$tco_done1) {
@@ -6427,7 +6532,7 @@
           return $tco_result;
         };
       };
-      var $lazy_thread = $runtime_lazy7("thread", "Hylograph.Forces.Pure.ManyBody", function() {
+      var $lazy_thread = $runtime_lazy7("thread", "Hylograph.Forces.ManyBody", function() {
         return function(tree, x0, x1, after) {
           if (tree instanceof Empty) {
             return after;
@@ -6459,7 +6564,7 @@
             return new Cluster(strength, x / weight, y / weight, (x1 - x0) * (x1 - x0) / theta2, first, after, NoMembers.value);
           }
           ;
-          throw new Error("Failed pattern match at Hylograph.Forces.Pure.ManyBody (line 205, column 39 - line 249, column 106): " + [tree.constructor.name]);
+          throw new Error("Failed pattern match at Hylograph.Forces.ManyBody (line 205, column 39 - line 249, column 106): " + [tree.constructor.name]);
         };
       });
       var thread = $lazy_thread(204);
@@ -6500,11 +6605,11 @@
         };
       }
       ;
-      throw new Error("Failed pattern match at Hylograph.Forces.Pure.ManyBody (line 146, column 32 - line 151, column 32): " + [v.scope.constructor.name]);
+      throw new Error("Failed pattern match at Hylograph.Forces.ManyBody (line 146, column 32 - line 151, column 32): " + [v.scope.constructor.name]);
     };
   };
 
-  // output/Hylograph.Forces.Pure.Position/index.js
+  // output/Hylograph.Forces.Position/index.js
   var map11 = /* @__PURE__ */ map(functorArray);
   var initialize6 = function(config) {
     return function(nodes) {
@@ -6545,7 +6650,7 @@
     };
   };
 
-  // output/Hylograph.Forces.Pure.Radial/index.js
+  // output/Hylograph.Forces.Radial/index.js
   var map15 = /* @__PURE__ */ map(functorArray);
   var orTiny = function(value12) {
     var $11 = value12 < 0 || value12 > 0;
@@ -6593,7 +6698,7 @@
     };
   };
 
-  // output/Hylograph.Forces.Pure.RectCollide/index.js
+  // output/Hylograph.Forces.RectCollide/index.js
   var $runtime_lazy8 = function(name15, moduleName, init) {
     var state3 = 0;
     var val;
@@ -6607,8 +6712,43 @@
     };
   };
   var comparing2 = /* @__PURE__ */ comparing(ordInt);
+  var pure6 = /* @__PURE__ */ pure(applicativeEffect);
   var when8 = /* @__PURE__ */ when(applicativeEffect);
-  var pure5 = /* @__PURE__ */ pure(applicativeEffect);
+  var StaysPut = /* @__PURE__ */ (function() {
+    function StaysPut2() {
+    }
+    ;
+    StaysPut2.value = new StaysPut2();
+    return StaysPut2;
+  })();
+  var GoesThrough = /* @__PURE__ */ (function() {
+    function GoesThrough2() {
+    }
+    ;
+    GoesThrough2.value = new GoesThrough2();
+    return GoesThrough2;
+  })();
+  var EveryPair2 = /* @__PURE__ */ (function() {
+    function EveryPair3() {
+    }
+    ;
+    EveryPair3.value = new EveryPair3();
+    return EveryPair3;
+  })();
+  var WithinGroups2 = /* @__PURE__ */ (function() {
+    function WithinGroups5() {
+    }
+    ;
+    WithinGroups5.value = new WithinGroups5();
+    return WithinGroups5;
+  })();
+  var BetweenGroups2 = /* @__PURE__ */ (function() {
+    function BetweenGroups5() {
+    }
+    ;
+    BetweenGroups5.value = new BetweenGroups5();
+    return BetweenGroups5;
+  })();
   var Cell = /* @__PURE__ */ (function() {
     function Cell2(value0, value1, value22, value32, value42, value52, value62, value72, value82) {
       this.value0 = value0;
@@ -6650,11 +6790,36 @@
     Finished4.value = new Finished4();
     return Finished4;
   })();
+  var withinGroups2 = /* @__PURE__ */ (function() {
+    return WithinGroups2.value;
+  })();
+  var staysPut = /* @__PURE__ */ (function() {
+    return StaysPut.value;
+  })();
+  var may = function(pairs) {
+    return function(box) {
+      return function(other) {
+        if (pairs instanceof EveryPair2) {
+          return true;
+        }
+        ;
+        if (pairs instanceof WithinGroups2) {
+          return box.group >= 0 && box.group === other.group;
+        }
+        ;
+        if (pairs instanceof BetweenGroups2) {
+          return !(box.group >= 0 && box.group === other.group);
+        }
+        ;
+        throw new Error("Failed pattern match at Hylograph.Forces.RectCollide (line 358, column 23 - line 361, column 68): " + [pairs.constructor.name]);
+      };
+    };
+  };
   var initialize8 = function(config) {
     return function(nodes) {
       var orZero = function(extent) {
-        var $22 = isNaNImpl(extent);
-        if ($22) {
+        var $37 = isNaNImpl(extent);
+        if ($37) {
           return 0;
         }
         ;
@@ -6666,14 +6831,32 @@
             index: index3,
             halfWidth: orZero(config.halfWidth(node)),
             halfHeight: orZero(config.halfHeight(node)),
+            group: (function() {
+              var v = config.group(node);
+              if (v instanceof Ungrouped) {
+                return -1 | 0;
+              }
+              ;
+              if (v instanceof InGroup) {
+                return v.value0;
+              }
+              ;
+              throw new Error("Failed pattern match at Hylograph.Forces.RectCollide (line 210, column 14 - line 212, column 33): " + [v.constructor.name]);
+            })(),
             node
           };
         };
       };
       return {
-        boxes: mapWithIndex2(box)(nodes),
+        boxes: filter(function(candidate) {
+          return config.include(candidate.node);
+        })(mapWithIndex2(box)(nodes)),
         strength: config.strength,
-        iterations: config.iterations
+        iterations: config.iterations,
+        pairs: config.pairs,
+        heldX: config.heldX,
+        heldY: config.heldY,
+        squeezed: config.squeezed
       };
     };
   };
@@ -6686,14 +6869,20 @@
       return v.item.index;
     }))(found);
   };
+  var goesThrough = /* @__PURE__ */ (function() {
+    return GoesThrough.value;
+  })();
+  var everyPair2 = /* @__PURE__ */ (function() {
+    return EveryPair2.value;
+  })();
   var direction = function(offset, tie, overlap) {
-    var $26 = offset > 0;
-    if ($26) {
+    var $43 = offset > 0;
+    if ($43) {
       return 1 * overlap;
     }
     ;
-    var $27 = offset < 0;
-    if ($27) {
+    var $44 = offset < 0;
+    if ($44) {
       return -1 * overlap;
     }
     ;
@@ -6714,8 +6903,8 @@
           if (occupants instanceof Cons) {
             $tco_var_occupants = occupants.value1;
             $copy_most = (function() {
-              var $29 = occupants.value0.item.halfWidth > most;
-              if ($29) {
+              var $46 = occupants.value0.item.halfWidth > most;
+              if ($46) {
                 return occupants.value0.item.halfWidth;
               }
               ;
@@ -6724,7 +6913,7 @@
             return;
           }
           ;
-          throw new Error("Failed pattern match at Hylograph.Forces.Pure.RectCollide (line 197, column 27 - line 199, column 104): " + [occupants.constructor.name]);
+          throw new Error("Failed pattern match at Hylograph.Forces.RectCollide (line 426, column 27 - line 428, column 104): " + [occupants.constructor.name]);
         }
         ;
         while (!$tco_done) {
@@ -6740,8 +6929,8 @@
       }
       ;
       if (cell2 instanceof Cell) {
-        var $34 = cell2.value0 > most;
-        if ($34) {
+        var $51 = cell2.value0 > most;
+        if ($51) {
           return cell2.value0;
         }
         ;
@@ -6752,7 +6941,7 @@
         return most;
       }
       ;
-      throw new Error("Failed pattern match at Hylograph.Forces.Pure.RectCollide (line 209, column 10 - line 211, column 23): " + [cell2.constructor.name]);
+      throw new Error("Failed pattern match at Hylograph.Forces.RectCollide (line 438, column 10 - line 440, column 23): " + [cell2.constructor.name]);
     };
     var tallest = function($copy_occupants) {
       return function($copy_most) {
@@ -6768,8 +6957,8 @@
           if (occupants instanceof Cons) {
             $tco_var_occupants = occupants.value1;
             $copy_most = (function() {
-              var $45 = occupants.value0.item.halfHeight > most;
-              if ($45) {
+              var $62 = occupants.value0.item.halfHeight > most;
+              if ($62) {
                 return occupants.value0.item.halfHeight;
               }
               ;
@@ -6778,7 +6967,7 @@
             return;
           }
           ;
-          throw new Error("Failed pattern match at Hylograph.Forces.Pure.RectCollide (line 202, column 28 - line 204, column 107): " + [occupants.constructor.name]);
+          throw new Error("Failed pattern match at Hylograph.Forces.RectCollide (line 431, column 28 - line 433, column 107): " + [occupants.constructor.name]);
         }
         ;
         while (!$tco_done1) {
@@ -6794,8 +6983,8 @@
       }
       ;
       if (cell2 instanceof Cell) {
-        var $50 = cell2.value1 > most;
-        if ($50) {
+        var $67 = cell2.value1 > most;
+        if ($67) {
           return cell2.value1;
         }
         ;
@@ -6806,9 +6995,9 @@
         return most;
       }
       ;
-      throw new Error("Failed pattern match at Hylograph.Forces.Pure.RectCollide (line 216, column 10 - line 218, column 23): " + [cell2.constructor.name]);
+      throw new Error("Failed pattern match at Hylograph.Forces.RectCollide (line 445, column 10 - line 447, column 23): " + [cell2.constructor.name]);
     };
-    var $lazy_thread = $runtime_lazy8("thread", "Hylograph.Forces.Pure.RectCollide", function() {
+    var $lazy_thread = $runtime_lazy8("thread", "Hylograph.Forces.RectCollide", function() {
       return function(tree, x0, y0, x1, y1, after) {
         if (tree instanceof Empty) {
           return after;
@@ -6822,21 +7011,24 @@
         if (tree instanceof Branch) {
           var middleY = (y0 + y1) / 2;
           var middleX = (x0 + x1) / 2;
-          var fourth = $lazy_thread(183)(tree.value3, middleX, middleY, x1, y1, after);
-          var third = $lazy_thread(184)(tree.value2, x0, middleY, middleX, y1, fourth);
-          var second = $lazy_thread(185)(tree.value1, middleX, y0, x1, middleY, third);
-          var first = $lazy_thread(186)(tree.value0, x0, y0, middleX, middleY, second);
+          var fourth = $lazy_thread(412)(tree.value3, middleX, middleY, x1, y1, after);
+          var third = $lazy_thread(413)(tree.value2, x0, middleY, middleX, y1, fourth);
+          var second = $lazy_thread(414)(tree.value1, middleX, y0, x1, middleY, third);
+          var first = $lazy_thread(415)(tree.value0, x0, y0, middleX, middleY, second);
           var height8 = taller(tree.value3, fourth, taller(tree.value2, third, taller(tree.value1, second, taller(tree.value0, first, 0))));
           var width8 = wider(tree.value3, fourth, wider(tree.value2, third, wider(tree.value1, second, wider(tree.value0, first, 0))));
           return new Cell(width8, height8, x0, y0, x1, y1, first, after, Nil.value);
         }
         ;
-        throw new Error("Failed pattern match at Hylograph.Forces.Pure.RectCollide (line 172, column 45 - line 194, column 54): " + [tree.constructor.name]);
+        throw new Error("Failed pattern match at Hylograph.Forces.RectCollide (line 401, column 45 - line 423, column 54): " + [tree.constructor.name]);
       };
     });
-    var thread = $lazy_thread(171);
+    var thread = $lazy_thread(400);
     return thread(planted.root, planted.extent.x0, planted.extent.y0, planted.extent.x1, planted.extent.y1, Finished3.value);
   };
+  var betweenGroups2 = /* @__PURE__ */ (function() {
+    return BetweenGroups2.value;
+  })();
   var anticipate2 = function(boxes) {
     return function __do2() {
       var points = $$new(Nil.value)();
@@ -6853,7 +7045,7 @@
       return read(points)();
     };
   };
-  var among = function(index3, halfWidth, halfHeight, aheadX, aheadY, occupants, start4) {
+  var among = function(allowed, halfWidth, halfHeight, aheadX, aheadY, occupants, start4) {
     var go2 = function($copy_remaining) {
       return function($copy_found) {
         var $tco_var_remaining = $copy_remaining;
@@ -6866,8 +7058,8 @@
           }
           ;
           if (remaining instanceof Cons) {
-            var $68 = remaining.value0.item.index !== index3 && (halfWidth + remaining.value0.item.halfWidth - abs(aheadX - remaining.value0.x) > 0 && halfHeight + remaining.value0.item.halfHeight - abs(aheadY - remaining.value0.y) > 0);
-            if ($68) {
+            var $85 = allowed(remaining.value0.item) && (halfWidth + remaining.value0.item.halfWidth - abs(aheadX - remaining.value0.x) > 0 && halfHeight + remaining.value0.item.halfHeight - abs(aheadY - remaining.value0.y) > 0);
+            if ($85) {
               $tco_var_remaining = remaining.value1;
               $copy_found = new Cons(remaining.value0, found);
               return;
@@ -6878,7 +7070,7 @@
             return;
           }
           ;
-          throw new Error("Failed pattern match at Hylograph.Forces.Pure.RectCollide (line 247, column 26 - line 254, column 27): " + [remaining.constructor.name]);
+          throw new Error("Failed pattern match at Hylograph.Forces.RectCollide (line 477, column 26 - line 484, column 27): " + [remaining.constructor.name]);
         }
         ;
         while (!$tco_done) {
@@ -6890,7 +7082,7 @@
     };
     return go2(occupants)(start4);
   };
-  var overlapping = function(index3, halfWidth, halfHeight, aheadX, aheadY, chain, start4) {
+  var overlapping = function(allowed, halfWidth, halfHeight, aheadX, aheadY, chain, start4) {
     var go2 = function($copy_cell) {
       return function($copy_found) {
         var $tco_var_cell = $copy_cell;
@@ -6899,8 +7091,8 @@
         function $tco_loop(cell2, found) {
           if (cell2 instanceof Cell) {
             if (cell2.value8 instanceof Nil) {
-              var $73 = cell2.value2 - aheadX > halfWidth + cell2.value0 || (aheadX - cell2.value4 > halfWidth + cell2.value0 || (cell2.value3 - aheadY > halfHeight + cell2.value1 || aheadY - cell2.value5 > halfHeight + cell2.value1));
-              if ($73) {
+              var $90 = cell2.value2 - aheadX > halfWidth + cell2.value0 || (aheadX - cell2.value4 > halfWidth + cell2.value0 || (cell2.value3 - aheadY > halfHeight + cell2.value1 || aheadY - cell2.value5 > halfHeight + cell2.value1));
+              if ($90) {
                 $tco_var_cell = cell2.value7;
                 $copy_found = found;
                 return;
@@ -6912,7 +7104,7 @@
             }
             ;
             $tco_var_cell = cell2.value7;
-            $copy_found = among(index3, halfWidth, halfHeight, aheadX, aheadY, cell2.value8, found);
+            $copy_found = among(allowed, halfWidth, halfHeight, aheadX, aheadY, cell2.value8, found);
             return;
           }
           ;
@@ -6921,7 +7113,7 @@
             return found;
           }
           ;
-          throw new Error("Failed pattern match at Hylograph.Forces.Pure.RectCollide (line 228, column 21 - line 237, column 24): " + [cell2.constructor.name]);
+          throw new Error("Failed pattern match at Hylograph.Forces.RectCollide (line 458, column 21 - line 467, column 24): " + [cell2.constructor.name]);
         }
         ;
         while (!$tco_done) {
@@ -6934,105 +7126,362 @@
     return go2(chain)(start4);
   };
   var apply10 = function(v) {
-    var settle = function(strength, box, found, aheadX, aheadY, startVx, startVy) {
+    var unpushed = {
+      startVx: 0,
+      startVy: 0,
+      upX: 0,
+      downX: 0,
+      upY: 0,
+      downY: 0
+    };
+    var through = function(index3) {
+      return function(startVelocity) {
+        return function(up) {
+          return function(down) {
+            var $101 = up > 0 && down > 0;
+            if ($101) {
+              var $102 = abs(startVelocity) > 1e-3 * (up + down);
+              if ($102) {
+                var $103 = startVelocity > 0;
+                if ($103) {
+                  return down;
+                }
+                ;
+                return -up;
+              }
+              ;
+              var $104 = up > down;
+              if ($104) {
+                return down;
+              }
+              ;
+              var $105 = up < down;
+              if ($105) {
+                return -up;
+              }
+              ;
+              var $106 = odd(index3);
+              if ($106) {
+                return down;
+              }
+              ;
+              return -up;
+            }
+            ;
+            return 0;
+          };
+        };
+      };
+    };
+    var starting = function(boxes) {
+      return function __do2() {
+        var gathered = $$new(Nil.value)();
+        foreachE(boxes)(function(box) {
+          return modify_(Cons.create({
+            startVx: box.node.vx,
+            startVy: box.node.vy,
+            upX: 0,
+            downX: 0,
+            upY: 0,
+            downY: 0
+          }))(gathered);
+        })();
+        var newestFirst = read(gathered)();
+        return reverse2(newestFirst);
+      };
+    };
+    var settle = function(strength, box, found, aheadX, aheadY, startVx, startVy, soFar) {
+      var heldY = v.heldY(box.node);
+      var heldX = v.heldX(box.node);
       var area = box.halfWidth * box.halfHeight;
       var go2 = function($copy_others) {
         return function($copy_vx) {
           return function($copy_vy) {
-            var $tco_var_others = $copy_others;
-            var $tco_var_vx = $copy_vx;
-            var $tco_done = false;
-            var $tco_result;
-            function $tco_loop(others, vx, vy) {
-              if (others instanceof Nil) {
-                $tco_done = true;
-                return {
-                  vx,
-                  vy
+            return function($copy_upX) {
+              return function($copy_downX) {
+                return function($copy_upY) {
+                  return function($copy_downY) {
+                    var $tco_var_others = $copy_others;
+                    var $tco_var_vx = $copy_vx;
+                    var $tco_var_vy = $copy_vy;
+                    var $tco_var_upX = $copy_upX;
+                    var $tco_var_downX = $copy_downX;
+                    var $tco_var_upY = $copy_upY;
+                    var $tco_done = false;
+                    var $tco_result;
+                    function $tco_loop(others, vx, vy, upX, downX, upY, downY) {
+                      if (others instanceof Nil) {
+                        $tco_done = true;
+                        return {
+                          vx,
+                          vy,
+                          pushed: {
+                            startVx: soFar.startVx,
+                            startVy: soFar.startVy,
+                            upX,
+                            downX,
+                            upY,
+                            downY
+                          }
+                        };
+                      }
+                      ;
+                      if (others instanceof Cons) {
+                        var tie = (function() {
+                          var $108 = box.index < others.value0.item.index;
+                          if ($108) {
+                            return -1;
+                          }
+                          ;
+                          return 1;
+                        })();
+                        var otherArea = others.value0.item.halfWidth * others.value0.item.halfHeight;
+                        var offsetY = aheadY - others.value0.y;
+                        var overlapY = box.halfHeight + others.value0.item.halfHeight - abs(offsetY);
+                        var offsetX = aheadX - others.value0.x;
+                        var overlapX = box.halfWidth + others.value0.item.halfWidth - abs(offsetX);
+                        var byArea = (function() {
+                          var $109 = area + otherArea > 0;
+                          if ($109) {
+                            return otherArea / (area + otherArea);
+                          }
+                          ;
+                          return 0.5;
+                        })();
+                        var $110 = overlapX <= overlapY;
+                        if ($110) {
+                          if (heldX) {
+                            $tco_var_others = others.value1;
+                            $tco_var_vx = vx;
+                            $tco_var_vy = vy;
+                            $tco_var_upX = upX;
+                            $tco_var_downX = downX;
+                            $tco_var_upY = upY;
+                            $copy_downY = downY;
+                            return;
+                          }
+                          ;
+                          var push2 = direction(offsetX, tie, overlapX) * strength * (function() {
+                            var $112 = v.heldX(others.value0.item.node);
+                            if ($112) {
+                              return 1;
+                            }
+                            ;
+                            return byArea;
+                          })();
+                          var $113 = push2 > 0;
+                          if ($113) {
+                            $tco_var_others = others.value1;
+                            $tco_var_vx = vx + push2;
+                            $tco_var_vy = vy;
+                            $tco_var_upX = upX + push2;
+                            $tco_var_downX = downX;
+                            $tco_var_upY = upY;
+                            $copy_downY = downY;
+                            return;
+                          }
+                          ;
+                          var $114 = push2 < 0;
+                          if ($114) {
+                            $tco_var_others = others.value1;
+                            $tco_var_vx = vx + push2;
+                            $tco_var_vy = vy;
+                            $tco_var_upX = upX;
+                            $tco_var_downX = downX - push2;
+                            $tco_var_upY = upY;
+                            $copy_downY = downY;
+                            return;
+                          }
+                          ;
+                          $tco_var_others = others.value1;
+                          $tco_var_vx = vx + push2;
+                          $tco_var_vy = vy;
+                          $tco_var_upX = upX;
+                          $tco_var_downX = downX;
+                          $tco_var_upY = upY;
+                          $copy_downY = downY;
+                          return;
+                        }
+                        ;
+                        if (heldY) {
+                          $tco_var_others = others.value1;
+                          $tco_var_vx = vx;
+                          $tco_var_vy = vy;
+                          $tco_var_upX = upX;
+                          $tco_var_downX = downX;
+                          $tco_var_upY = upY;
+                          $copy_downY = downY;
+                          return;
+                        }
+                        ;
+                        var push2 = direction(offsetY, tie, overlapY) * strength * (function() {
+                          var $116 = v.heldY(others.value0.item.node);
+                          if ($116) {
+                            return 1;
+                          }
+                          ;
+                          return byArea;
+                        })();
+                        var $117 = push2 > 0;
+                        if ($117) {
+                          $tco_var_others = others.value1;
+                          $tco_var_vx = vx;
+                          $tco_var_vy = vy + push2;
+                          $tco_var_upX = upX;
+                          $tco_var_downX = downX;
+                          $tco_var_upY = upY + push2;
+                          $copy_downY = downY;
+                          return;
+                        }
+                        ;
+                        var $118 = push2 < 0;
+                        if ($118) {
+                          $tco_var_others = others.value1;
+                          $tco_var_vx = vx;
+                          $tco_var_vy = vy + push2;
+                          $tco_var_upX = upX;
+                          $tco_var_downX = downX;
+                          $tco_var_upY = upY;
+                          $copy_downY = downY - push2;
+                          return;
+                        }
+                        ;
+                        $tco_var_others = others.value1;
+                        $tco_var_vx = vx;
+                        $tco_var_vy = vy + push2;
+                        $tco_var_upX = upX;
+                        $tco_var_downX = downX;
+                        $tco_var_upY = upY;
+                        $copy_downY = downY;
+                        return;
+                      }
+                      ;
+                      throw new Error("Failed pattern match at Hylograph.Forces.RectCollide (line 312, column 45 - line 340, column 64): " + [others.constructor.name]);
+                    }
+                    ;
+                    while (!$tco_done) {
+                      $tco_result = $tco_loop($tco_var_others, $tco_var_vx, $tco_var_vy, $tco_var_upX, $tco_var_downX, $tco_var_upY, $copy_downY);
+                    }
+                    ;
+                    return $tco_result;
+                  };
                 };
-              }
-              ;
-              if (others instanceof Cons) {
-                var tie = (function() {
-                  var $85 = box.index < others.value0.item.index;
-                  if ($85) {
-                    return -1;
-                  }
-                  ;
-                  return 1;
-                })();
-                var otherArea = others.value0.item.halfWidth * others.value0.item.halfHeight;
-                var share = (function() {
-                  var $86 = area + otherArea > 0;
-                  if ($86) {
-                    return otherArea / (area + otherArea);
-                  }
-                  ;
-                  return 0.5;
-                })();
-                var offsetY = aheadY - others.value0.y;
-                var overlapY = box.halfHeight + others.value0.item.halfHeight - abs(offsetY);
-                var offsetX = aheadX - others.value0.x;
-                var overlapX = box.halfWidth + others.value0.item.halfWidth - abs(offsetX);
-                var $87 = overlapX <= overlapY;
-                if ($87) {
-                  $tco_var_others = others.value1;
-                  $tco_var_vx = vx + direction(offsetX, tie, overlapX) * strength * share;
-                  $copy_vy = vy;
-                  return;
-                }
-                ;
-                $tco_var_others = others.value1;
-                $tco_var_vx = vx;
-                $copy_vy = vy + direction(offsetY, tie, overlapY) * strength * share;
-                return;
-              }
-              ;
-              throw new Error("Failed pattern match at Hylograph.Forces.Pure.RectCollide (line 116, column 25 - line 130, column 92): " + [others.constructor.name]);
-            }
-            ;
-            while (!$tco_done) {
-              $tco_result = $tco_loop($tco_var_others, $tco_var_vx, $copy_vy);
-            }
-            ;
-            return $tco_result;
+              };
+            };
           };
         };
       };
-      return go2(inIndexOrder(found))(startVx)(startVy);
+      return go2(inIndexOrder(found))(startVx)(startVy)(soFar.upX)(soFar.downX)(soFar.upY)(soFar.downY);
     };
-    return forE(0)(v.iterations)(function(v1) {
+    var partners = function(box) {
+      return function(other) {
+        return other.index !== box.index && may(v.pairs)(box)(other);
+      };
+    };
+    if (v.squeezed instanceof StaysPut) {
+      return forE(0)(v.iterations)(function(v1) {
+        return function __do2() {
+          var points = anticipate2(v.boxes)();
+          var chain = cells(build(points));
+          return foreachE(v.boxes)(function(box) {
+            var aheadY = box.node.y + box.node.vy;
+            var aheadX = box.node.x + box.node.vx;
+            return when8(isFiniteImpl(aheadX) && isFiniteImpl(aheadY))((function() {
+              var v2 = overlapping(partners(box), box.halfWidth, box.halfHeight, aheadX, aheadY, chain, Nil.value);
+              if (v2 instanceof Nil) {
+                return pure6(unit);
+              }
+              ;
+              var moved = settle(v.strength, box, v2, aheadX, aheadY, box.node.vx, box.node.vy, unpushed);
+              return function() {
+                return writeVelocity(box.node, moved.vx, moved.vy);
+              };
+            })());
+          })();
+        };
+      });
+    }
+    ;
+    if (v.squeezed instanceof GoesThrough) {
       return function __do2() {
-        var points = anticipate2(v.boxes)();
-        var chain = cells(build(points));
+        var start4 = starting(v.boxes)();
+        var pushed = $$new(start4)();
+        forE(0)(v.iterations)(function(v1) {
+          return function __do3() {
+            var points = anticipate2(v.boxes)();
+            var chain = cells(build(points));
+            var before = read(pushed)();
+            var waiting = $$new(before)();
+            var done = $$new(Nil.value)();
+            foreachE(v.boxes)(function(box) {
+              return function __do4() {
+                var queue = read(waiting)();
+                if (queue instanceof Nil) {
+                  return unit;
+                }
+                ;
+                if (queue instanceof Cons) {
+                  write(queue.value1)(waiting)();
+                  var aheadY = box.node.y + box.node.vy;
+                  var aheadX = box.node.x + box.node.vx;
+                  var $124 = isFiniteImpl(aheadX) && isFiniteImpl(aheadY);
+                  if ($124) {
+                    var v2 = overlapping(partners(box), box.halfWidth, box.halfHeight, aheadX, aheadY, chain, Nil.value);
+                    if (v2 instanceof Nil) {
+                      return modify_(Cons.create(queue.value0))(done)();
+                    }
+                    ;
+                    var moved = settle(v.strength, box, v2, aheadX, aheadY, box.node.vx, box.node.vy, queue.value0);
+                    writeVelocity(box.node, moved.vx, moved.vy);
+                    return modify_(Cons.create(moved.pushed))(done)();
+                  }
+                  ;
+                  return modify_(Cons.create(queue.value0))(done)();
+                }
+                ;
+                throw new Error("Failed pattern match at Hylograph.Forces.RectCollide (line 258, column 9 - line 272, column 47): " + [queue.constructor.name]);
+              };
+            })();
+            var newestFirst = read(done)();
+            return write(reverse2(newestFirst))(pushed)();
+          };
+        })();
+        var sums = read(pushed)();
+        var remaining = $$new(sums)();
         return foreachE(v.boxes)(function(box) {
-          var aheadY = box.node.y + box.node.vy;
-          var aheadX = box.node.x + box.node.vx;
-          return when8(isFiniteImpl(aheadX) && isFiniteImpl(aheadY))((function() {
-            var v2 = overlapping(box.index, box.halfWidth, box.halfHeight, aheadX, aheadY, chain, Nil.value);
-            if (v2 instanceof Nil) {
-              return pure5(unit);
+          return function __do3() {
+            var queue = read(remaining)();
+            if (queue instanceof Nil) {
+              return unit;
             }
             ;
-            var moved = settle(v.strength, box, v2, aheadX, aheadY, box.node.vx, box.node.vy);
-            return function() {
-              return writeVelocity(box.node, moved.vx, moved.vy);
-            };
-          })());
+            if (queue instanceof Cons) {
+              write(queue.value1)(remaining)();
+              var throughY = through(box.index)(queue.value0.startVy)(queue.value0.upY)(queue.value0.downY);
+              var throughX = through(box.index)(queue.value0.startVx)(queue.value0.upX)(queue.value0.downX);
+              return when8(throughX !== 0 || throughY !== 0)(function() {
+                return writeVelocity(box.node, box.node.vx + throughX, box.node.vy + throughY);
+              })();
+            }
+            ;
+            throw new Error("Failed pattern match at Hylograph.Forces.RectCollide (line 280, column 7 - line 288, column 98): " + [queue.constructor.name]);
+          };
         })();
       };
-    });
+    }
+    ;
+    throw new Error("Failed pattern match at Hylograph.Forces.RectCollide (line 227, column 29 - line 288, column 98): " + [v.squeezed.constructor.name]);
   };
 
-  // output/Hylograph.Forces.Pure.Tick/index.js
-  var pure6 = /* @__PURE__ */ pure(applicativeEffect);
+  // output/Hylograph.Forces.Tick/index.js
+  var pure7 = /* @__PURE__ */ pure(applicativeEffect);
   var when9 = /* @__PURE__ */ when(applicativeEffect);
   var pin = function(nodes) {
     return foreachE(nodes)(function(node) {
       var v = toMaybe(node.fy);
       var v1 = toMaybe(node.fx);
       if (v1 instanceof Nothing && v instanceof Nothing) {
-        return pure6(unit);
+        return pure7(unit);
       }
       ;
       if (v1 instanceof Just && v instanceof Nothing) {
@@ -7056,7 +7505,7 @@
         };
       }
       ;
-      throw new Error("Failed pattern match at Hylograph.Forces.Pure.Tick (line 125, column 27 - line 135, column 46): " + [v1.constructor.name, v.constructor.name]);
+      throw new Error("Failed pattern match at Hylograph.Forces.Tick (line 125, column 27 - line 135, column 46): " + [v1.constructor.name, v.constructor.name]);
     });
   };
   var integrate = function(velocityRetention) {
@@ -7092,7 +7541,7 @@
           };
         }
         ;
-        throw new Error("Failed pattern match at Hylograph.Forces.Pure.Tick (line 52, column 27 - line 64, column 46): " + [v1.constructor.name, v.constructor.name]);
+        throw new Error("Failed pattern match at Hylograph.Forces.Tick (line 52, column 27 - line 64, column 46): " + [v1.constructor.name, v.constructor.name]);
       });
     };
   };
@@ -7120,7 +7569,7 @@
             return v.value0;
           }
           ;
-          throw new Error("Failed pattern match at Hylograph.Forces.Pure.Tick (line 98, column 9 - line 100, column 24): " + [v.constructor.name]);
+          throw new Error("Failed pattern match at Hylograph.Forces.Tick (line 98, column 9 - line 100, column 24): " + [v.constructor.name]);
         })(), (function() {
           var v = toMaybe(placed.node.fy);
           if (v instanceof Nothing) {
@@ -7131,7 +7580,7 @@
             return v.value0;
           }
           ;
-          throw new Error("Failed pattern match at Hylograph.Forces.Pure.Tick (line 102, column 9 - line 104, column 24): " + [v.constructor.name]);
+          throw new Error("Failed pattern match at Hylograph.Forces.Tick (line 102, column 9 - line 104, column 24): " + [v.constructor.name]);
         })());
         when9(isNaNImpl(placed.node.x) || isNaNImpl(placed.node.y))((function() {
           var radius = 10 * sqrt(0.5 + toNumber(placed.index));
@@ -7158,7 +7607,7 @@
     };
   };
 
-  // output/Hylograph.Forces.Pure.Towards/index.js
+  // output/Hylograph.Forces.Towards/index.js
   var map16 = /* @__PURE__ */ map(functorArray);
   var initialize9 = function(config) {
     return function(nodes) {
@@ -7179,8 +7628,8 @@
           })()
         };
       };
-      var aimed = function(pulled1) {
-        return !(isNaNImpl(pulled1.x) || isNaNImpl(pulled1.y));
+      var aimed = function(candidate) {
+        return !(isNaNImpl(candidate.x) || isNaNImpl(candidate.y));
       };
       return filter(aimed)(map16(pulled)(nodes));
     };
@@ -7195,10 +7644,10 @@
     };
   };
 
-  // output/Hylograph.Forces.Pure/index.js
+  // output/Hylograph.Forces/index.js
   var map17 = /* @__PURE__ */ map(functorEither);
   var when10 = /* @__PURE__ */ when(applicativeEffect);
-  var pure7 = /* @__PURE__ */ pure(applicativeEffect);
+  var pure8 = /* @__PURE__ */ pure(applicativeEffect);
   var ManyBodyForce = /* @__PURE__ */ (function() {
     function ManyBodyForce3(value0) {
       this.value0 = value0;
@@ -7388,22 +7837,30 @@
       return new ContainForce(initialize4(config)(nodes));
     };
   };
-  var constrain2 = function(forces) {
+  var constrain3 = function(forces) {
     return function(nodes) {
-      var clamps = function(force) {
+      var hard = function(force) {
         if (force instanceof ContainForce) {
           return isHard(force.value0);
         }
         ;
+        if (force instanceof DirectionalForce) {
+          return isHard2(force.value0);
+        }
+        ;
         return false;
       };
-      return when10(any2(clamps)(forces))(function __do2() {
+      return when10(any2(hard)(forces))(function __do2() {
         foreachE(forces)(function(force) {
           if (force instanceof ContainForce) {
             return constrain(force.value0);
           }
           ;
-          return pure7(unit);
+          if (force instanceof DirectionalForce) {
+            return constrain2(force.value0);
+          }
+          ;
+          return pure8(unit);
         })();
         return pin(nodes)();
       });
@@ -7476,7 +7933,7 @@
         return apply6(force.value0)(alpha);
       }
       ;
-      throw new Error("Failed pattern match at Hylograph.Forces.Pure (line 156, column 26 - line 168, column 58): " + [force.constructor.name]);
+      throw new Error("Failed pattern match at Hylograph.Forces (line 159, column 26 - line 171, column 58): " + [force.constructor.name]);
     };
   };
 
@@ -7726,9 +8183,9 @@
       };
     };
   };
-  var constrain3 = function(forces) {
+  var constrain4 = function(forces) {
     return function(nodes) {
-      return constrain2(map19(function(v) {
+      return constrain3(map19(function(v) {
         return v.force;
       })(forces))(nodes);
     };
@@ -7752,7 +8209,7 @@
   var lookup2 = /* @__PURE__ */ lookup(ordInt);
   var show2 = /* @__PURE__ */ show(showInt);
   var bind2 = /* @__PURE__ */ bind(bindEither);
-  var pure8 = /* @__PURE__ */ pure(applicativeEither);
+  var pure9 = /* @__PURE__ */ pure(applicativeEither);
   var traverse3 = /* @__PURE__ */ traverse(traversableArray)(applicativeEither);
   var apply12 = /* @__PURE__ */ apply(applyMaybe);
   var map110 = /* @__PURE__ */ map(functorMaybe);
@@ -7829,25 +8286,25 @@
     AllPairs3.value = new AllPairs3();
     return AllPairs3;
   })();
-  var WithinGroups2 = /* @__PURE__ */ (function() {
-    function WithinGroups4(value0) {
+  var WithinGroups3 = /* @__PURE__ */ (function() {
+    function WithinGroups5(value0) {
       this.value0 = value0;
     }
     ;
-    WithinGroups4.create = function(value0) {
-      return new WithinGroups4(value0);
+    WithinGroups5.create = function(value0) {
+      return new WithinGroups5(value0);
     };
-    return WithinGroups4;
+    return WithinGroups5;
   })();
-  var BetweenGroups2 = /* @__PURE__ */ (function() {
-    function BetweenGroups4(value0) {
+  var BetweenGroups3 = /* @__PURE__ */ (function() {
+    function BetweenGroups5(value0) {
       this.value0 = value0;
     }
     ;
-    BetweenGroups4.create = function(value0) {
-      return new BetweenGroups4(value0);
+    BetweenGroups5.create = function(value0) {
+      return new BetweenGroups5(value0);
     };
-    return BetweenGroups4;
+    return BetweenGroups5;
   })();
   var LinkStrength = /* @__PURE__ */ (function() {
     function LinkStrength2(value0) {
@@ -8001,12 +8458,12 @@
           return new Left("node not found: " + show2(id2));
         }
         ;
-        throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1065, column 13 - line 1067, column 52): " + [v.constructor.name]);
+        throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1178, column 13 - line 1180, column 52): " + [v.constructor.name]);
       };
       var ended2 = function(v) {
         return bind2(find3(v.value1.source))(function(source) {
           return bind2(find3(v.value1.target))(function(target5) {
-            return pure8({
+            return pure9({
               source: v.value1.source,
               target: v.value1.target,
               ends: {
@@ -8030,7 +8487,7 @@
       return 0;
     }
     ;
-    throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 195, column 17 - line 197, column 19): " + [v.constructor.name]);
+    throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 199, column 17 - line 201, column 19): " + [v.constructor.name]);
   };
   var valueOf = function(v) {
     if (v instanceof Static) {
@@ -8043,7 +8500,7 @@
       return v.value0;
     }
     ;
-    throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1034, column 11 - line 1036, column 17): " + [v.constructor.name]);
+    throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1124, column 11 - line 1126, column 17): " + [v.constructor.name]);
   };
   var staticOr = function(fallback) {
     return function(v) {
@@ -8055,7 +8512,7 @@
         return fallback;
       }
       ;
-      throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 531, column 21 - line 533, column 24): " + [v.constructor.name]);
+      throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 574, column 21 - line 576, column 24): " + [v.constructor.name]);
     };
   };
   var withStrength = function(v) {
@@ -8145,6 +8602,9 @@
           halfWidth: v1.value0.halfWidth,
           halfHeight: v1.value0.halfHeight,
           iterations: v1.value0.iterations,
+          filter: v1.value0.filter,
+          scope: v1.value0.scope,
+          throughSqueeze: v1.value0.throughSqueeze,
           strength: staticOr(v1.value0.strength)(v)
         });
       }
@@ -8155,6 +8615,8 @@
           regions: v1.value0.regions,
           region: v1.value0.region,
           radius: v1.value0.radius,
+          halfWidth: v1.value0.halfWidth,
+          halfHeight: v1.value0.halfHeight,
           hard: v1.value0.hard,
           strength: staticOr(v1.value0.strength)(v)
         });
@@ -8174,7 +8636,7 @@
           return new LinkForce2(v1.value0);
         }
         ;
-        throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 522, column 18 - line 524, column 29): " + [v.constructor.name]);
+        throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 565, column 18 - line 567, column 29): " + [v.constructor.name]);
       }
       ;
       if (v1 instanceof DirectionalForce2) {
@@ -8184,6 +8646,7 @@
             gap: v1.value0.gap,
             axis: v1.value0.axis,
             iterations: v1.value0.iterations,
+            hard: v1.value0.hard,
             strength: new Static(v.value0)
           });
         }
@@ -8192,10 +8655,10 @@
           return new DirectionalForce2(v1.value0);
         }
         ;
-        throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 525, column 25 - line 527, column 36): " + [v.constructor.name]);
+        throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 568, column 25 - line 570, column 36): " + [v.constructor.name]);
       }
       ;
-      throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 511, column 18 - line 527, column 36): " + [v1.constructor.name]);
+      throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 554, column 18 - line 570, column 36): " + [v1.constructor.name]);
     };
   };
   var withX = function(v) {
@@ -8308,25 +8771,25 @@
       return polygon(v.value0);
     }
     ;
-    throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1050, column 12 - line 1053, column 57): " + [v.constructor.name]);
+    throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1140, column 12 - line 1143, column 57): " + [v.constructor.name]);
   };
   var mergeSimulationState = function(current) {
     return function(desired) {
-      var $287 = {};
-      for (var $288 in desired) {
-        if ({}.hasOwnProperty.call(desired, $288)) {
-          $287[$288] = desired[$288];
+      var $306 = {};
+      for (var $307 in desired) {
+        if ({}.hasOwnProperty.call(desired, $307)) {
+          $306[$307] = desired[$307];
         }
         ;
       }
       ;
-      $287.x = current.x;
-      $287.y = current.y;
-      $287.vx = current.vx;
-      $287.vy = current.vy;
-      $287.fx = current.fx;
-      $287.fy = current.fy;
-      return $287;
+      $306.x = current.x;
+      $306.y = current.y;
+      $306.vx = current.vx;
+      $306.vy = current.vy;
+      $306.fx = current.fx;
+      $306.fy = current.fy;
+      return $306;
     };
   };
   var membership = function(group3) {
@@ -8340,7 +8803,7 @@
         return ungrouped;
       }
       ;
-      throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1045, column 25 - line 1047, column 33): " + [v.constructor.name]);
+      throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1135, column 25 - line 1137, column 33): " + [v.constructor.name]);
     };
   };
   var manyBody2 = function(name15) {
@@ -8364,7 +8827,7 @@
         return map20(value12.value0)(ends);
       }
       ;
-      throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 733, column 25 - line 735, column 26): " + [value12.constructor.name]);
+      throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 794, column 25 - line 796, column 26): " + [value12.constructor.name]);
     };
   };
   var linkStrengths = function(strength) {
@@ -8386,7 +8849,39 @@
         return map20(byDegree)(ends);
       }
       ;
-      throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 744, column 31 - line 746, column 32): " + [strength.constructor.name]);
+      throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 805, column 31 - line 807, column 32): " + [strength.constructor.name]);
+    };
+  };
+  var linkProblem = function(setupConfig) {
+    return function(nodes) {
+      return function(links) {
+        var alongLinks = function(v2) {
+          if (v2 instanceof LinkForce2) {
+            return true;
+          }
+          ;
+          if (v2 instanceof DirectionalForce2) {
+            return true;
+          }
+          ;
+          return false;
+        };
+        var $319 = any2(alongLinks)(setupConfig.forces);
+        if ($319) {
+          var v = withEnds(nodes)(links);
+          if (v instanceof Left) {
+            return new Just(v.value0);
+          }
+          ;
+          if (v instanceof Right) {
+            return Nothing.value;
+          }
+          ;
+          throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1158, column 5 - line 1160, column 25): " + [v.constructor.name]);
+        }
+        ;
+        return Nothing.value;
+      };
     };
   };
   var getParams = function(s) {
@@ -8444,7 +8939,7 @@
       return v.value0.name;
     }
     ;
-    throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 385, column 13 - line 397, column 31): " + [v.constructor.name]);
+    throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 418, column 13 - line 430, column 31): " + [v.constructor.name]);
   };
   var filtered = function(keep) {
     return function(strength) {
@@ -8454,8 +8949,8 @@
       ;
       if (keep instanceof Just) {
         return function(node) {
-          var $325 = keep.value0(node);
-          if ($325) {
+          var $351 = keep.value0(node);
+          if ($351) {
             return strength(node);
           }
           ;
@@ -8463,7 +8958,7 @@
         };
       }
       ;
-      throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1040, column 26 - line 1042, column 71): " + [keep.constructor.name]);
+      throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1130, column 26 - line 1132, column 71): " + [keep.constructor.name]);
     };
   };
   var recipe = function(v) {
@@ -8481,15 +8976,15 @@
                   return everyPair;
                 }
                 ;
-                if (v.value0.scope instanceof WithinGroups2) {
+                if (v.value0.scope instanceof WithinGroups3) {
                   return withinGroups;
                 }
                 ;
-                if (v.value0.scope instanceof BetweenGroups2) {
+                if (v.value0.scope instanceof BetweenGroups3) {
                   return betweenGroups;
                 }
                 ;
-                throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 936, column 16 - line 939, column 56): " + [v.value0.scope.constructor.name]);
+                throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1009, column 16 - line 1012, column 56): " + [v.value0.scope.constructor.name]);
               })(),
               group: (function() {
                 if (v.value0.scope instanceof AllPairs) {
@@ -8498,15 +8993,15 @@
                   };
                 }
                 ;
-                if (v.value0.scope instanceof WithinGroups2) {
+                if (v.value0.scope instanceof WithinGroups3) {
                   return membership(v.value0.scope.value0);
                 }
                 ;
-                if (v.value0.scope instanceof BetweenGroups2) {
+                if (v.value0.scope instanceof BetweenGroups3) {
                   return membership(v.value0.scope.value0);
                 }
                 ;
-                throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 940, column 16 - line 943, column 50): " + [v.value0.scope.constructor.name]);
+                throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1013, column 16 - line 1016, column 50): " + [v.value0.scope.constructor.name]);
               })()
             })(random)(nodes));
           };
@@ -8554,7 +9049,7 @@
                     });
                   }
                   ;
-                  throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 963, column 19 - line 965, column 84): " + [v.value0.strength.constructor.name]);
+                  throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1036, column 19 - line 1038, column 84): " + [v.value0.strength.constructor.name]);
                 })(),
                 iterations: v.value0.iterations
               })(random)(nodes)(ended2);
@@ -8645,7 +9140,51 @@
               halfWidth: valueOf(v.value0.halfWidth),
               halfHeight: valueOf(v.value0.halfHeight),
               strength: v.value0.strength,
-              iterations: v.value0.iterations
+              iterations: v.value0.iterations,
+              include: fromMaybe(function(v3) {
+                return true;
+              })(v.value0.filter),
+              pairs: (function() {
+                if (v.value0.scope instanceof AllPairs) {
+                  return everyPair2;
+                }
+                ;
+                if (v.value0.scope instanceof WithinGroups3) {
+                  return withinGroups2;
+                }
+                ;
+                if (v.value0.scope instanceof BetweenGroups3) {
+                  return betweenGroups2;
+                }
+                ;
+                throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1073, column 16 - line 1076, column 59): " + [v.value0.scope.constructor.name]);
+              })(),
+              group: (function() {
+                if (v.value0.scope instanceof AllPairs) {
+                  return function(v3) {
+                    return ungrouped;
+                  };
+                }
+                ;
+                if (v.value0.scope instanceof WithinGroups3) {
+                  return membership(v.value0.scope.value0);
+                }
+                ;
+                if (v.value0.scope instanceof BetweenGroups3) {
+                  return membership(v.value0.scope.value0);
+                }
+                ;
+                throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1077, column 16 - line 1080, column 50): " + [v.value0.scope.constructor.name]);
+              })(),
+              heldX: pinnedX,
+              heldY: pinnedY,
+              squeezed: (function() {
+                if (v.value0.throughSqueeze) {
+                  return goesThrough;
+                }
+                ;
+                return staysPut;
+              })()
             })(nodes));
           };
         };
@@ -8668,9 +9207,11 @@
                   return free;
                 }
                 ;
-                throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1007, column 28 - line 1009, column 40): " + [v3.constructor.name]);
+                throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1092, column 28 - line 1094, column 40): " + [v3.constructor.name]);
               },
               radius: valueOf(v.value0.radius),
+              halfWidth: valueOf(v.value0.halfWidth),
+              halfHeight: valueOf(v.value0.halfHeight),
               strength: v.value0.strength,
               hard: v.value0.hard
             })(nodes));
@@ -8707,7 +9248,10 @@
                   return valueOf(v.value0.strength)(l.ends);
                 },
                 axis: v.value0.axis,
-                iterations: v.value0.iterations
+                iterations: v.value0.iterations,
+                hard: v.value0.hard,
+                heldX: pinnedX,
+                heldY: pinnedY
               })(nodes)(ended2);
             });
           };
@@ -8715,7 +9259,7 @@
       };
     }
     ;
-    throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 929, column 10 - line 1030, column 12): " + [v.constructor.name]);
+    throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1002, column 10 - line 1120, column 12): " + [v.constructor.name]);
   };
   var tryApplySetup = function(setupConfig) {
     return function(sim) {
@@ -8738,10 +9282,16 @@
         if (made instanceof Right) {
           write(fromFoldable1(made.value0))(sim.forces)();
           write(setupConfig.params.alpha)(sim.alpha)();
+          write({
+            alphaMin: setupConfig.params.alphaMin,
+            alphaDecay: setupConfig.params.alphaDecay,
+            alphaTarget: setupConfig.params.alphaTarget,
+            velocityRetention: setupConfig.params.velocityRetention
+          })(sim.settings)();
           return new Right(unit);
         }
         ;
-        throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 910, column 3 - line 919, column 24): " + [made.constructor.name]);
+        throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 976, column 3 - line 992, column 24): " + [made.constructor.name]);
       };
     };
   };
@@ -8788,7 +9338,7 @@
           };
         }
         ;
-        throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1231, column 7 - line 1237, column 73): " + [v.constructor.name]);
+        throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 1344, column 7 - line 1350, column 73): " + [v.constructor.name]);
       };
       var processed = map20(processDesired)(desiredNodes);
       var entered = map20(function(v) {
@@ -8801,10 +9351,10 @@
       })(processed);
       var updated = map20(function(v) {
         return v.node;
-      })(filter(function($365) {
+      })(filter(function($399) {
         return !(function(v) {
           return v.isEnter;
-        })($365);
+        })($399);
       })(processed));
       return {
         entered,
@@ -8860,7 +9410,7 @@
           return unit;
         }
         ;
-        throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 890, column 3 - line 892, column 25): " + [outcome.constructor.name]);
+        throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup (line 956, column 3 - line 958, column 25): " + [outcome.constructor.name]);
       };
     };
   };
@@ -8905,14 +9455,14 @@
   };
 
   // output/Hylograph.ForceEngine.Simulation/index.js
-  var pure9 = /* @__PURE__ */ pure(applicativeEffect);
+  var pure10 = /* @__PURE__ */ pure(applicativeEffect);
   var for_3 = /* @__PURE__ */ for_(applicativeEffect);
   var for_1 = /* @__PURE__ */ for_3(foldableArray);
   var when11 = /* @__PURE__ */ when(applicativeEffect);
   var fromFoldable8 = /* @__PURE__ */ fromFoldable(foldableList);
   var invokeTickCallback = function(sim) {
     if (sim.callbacks instanceof Nothing) {
-      return pure9(unit);
+      return pure10(unit);
     }
     ;
     if (sim.callbacks instanceof Just) {
@@ -8922,7 +9472,7 @@
       };
     }
     ;
-    throw new Error("Failed pattern match at Hylograph.ForceEngine.Simulation (line 492, column 26 - line 496, column 13): " + [sim.callbacks.constructor.name]);
+    throw new Error("Failed pattern match at Hylograph.ForceEngine.Simulation (line 520, column 26 - line 524, column 13): " + [sim.callbacks.constructor.name]);
   };
   var getNodes = function(sim) {
     return read(sim.nodes);
@@ -8943,9 +9493,10 @@
       var alphaRef = $$new(1)();
       var prevAlphaRef = $$new(1)();
       var runningRef = $$new(false)();
-      var cancelRef = $$new(pure9(unit))();
-      var tickRef = $$new(pure9(unit))();
+      var cancelRef = $$new(pure10(unit))();
+      var tickRef = $$new(pure10(unit))();
       var random = randomSource();
+      var settings = $$new(config)();
       return {
         nodes: nodesRef,
         links: linksRef,
@@ -8954,6 +9505,7 @@
         alpha: alphaRef,
         prevAlpha: prevAlphaRef,
         config,
+        settings,
         running: runningRef,
         cancelAnimation: cancelRef,
         tickCallback: tickRef,
@@ -8973,7 +9525,7 @@
         };
         var alphaThresholds = [0.5, 0.1, 0.01];
         if (sim.callbacks instanceof Nothing) {
-          return pure9(unit);
+          return pure10(unit);
         }
         ;
         if (sim.callbacks instanceof Just) {
@@ -8985,7 +9537,7 @@
           });
         }
         ;
-        throw new Error("Failed pattern match at Hylograph.ForceEngine.Simulation (line 505, column 47 - line 512, column 26): " + [sim.callbacks.constructor.name]);
+        throw new Error("Failed pattern match at Hylograph.ForceEngine.Simulation (line 533, column 47 - line 540, column 26): " + [sim.callbacks.constructor.name]);
       };
     };
   };
@@ -8995,11 +9547,12 @@
       var forces = read(sim.forces)();
       var alpha = read(sim.alpha)();
       var prevAlpha = read(sim.prevAlpha)();
+      var settings = read(sim.settings)();
       var forceHandles = fromFoldable8(values(forces));
       applyForces(forceHandles)(alpha)();
-      integratePositions(nodes)(sim.config.velocityRetention)();
-      constrain3(forceHandles)(nodes)();
-      var newAlpha = decayAlpha(alpha)(sim.config.alphaMin)(sim.config.alphaDecay)(sim.config.alphaTarget);
+      integratePositions(nodes)(settings.velocityRetention)();
+      constrain4(forceHandles)(nodes)();
+      var newAlpha = decayAlpha(alpha)(settings.alphaMin)(settings.alphaDecay)(settings.alphaTarget);
       write(newAlpha)(sim.alpha)();
       write(alpha)(sim.prevAlpha)();
       var legacyCallback = read(sim.tickCallback)();
@@ -9154,6 +9707,16 @@
     sim.set_velocities(velocities);
     sim.set_fixed(fixed);
   }
+  function syncPinsToWasm_(sim, nodes) {
+    const n = nodes.length;
+    const fixed = new Float32Array(n * 2);
+    for (let i = 0; i < n; i++) {
+      const node = nodes[i];
+      fixed[i * 2] = node.fx == null ? NaN : node.fx;
+      fixed[i * 2 + 1] = node.fy == null ? NaN : node.fy;
+    }
+    sim.set_fixed(fixed);
+  }
   function syncNodesFromWasm_(sim, nodes) {
     const positions = sim.get_positions();
     const velocities = sim.get_velocities();
@@ -9208,6 +9771,15 @@
   }
   function setManyBodyScope_(sim, force, scope2) {
     return sim.set_many_body_scope(force, scope2);
+  }
+  function setRectCollidePairs_(sim, force, pairs) {
+    return sim.set_rect_collide_pairs(force, pairs);
+  }
+  function setRectCollideThrough_(sim, force, through) {
+    return sim.set_rect_collide_through(force, through);
+  }
+  function setDirectionalHard_(sim, force, hard) {
+    return sim.set_directional_hard(force, hard);
   }
   function addDirectional_(sim, gap, axisX, axisY, strength, iterations) {
     return sim.add_directional(gap, axisX, axisY, strength, iterations);
@@ -9285,24 +9857,49 @@
     AllPairs3.value = new AllPairs3();
     return AllPairs3;
   })();
-  var WithinGroups3 = /* @__PURE__ */ (function() {
-    function WithinGroups4() {
+  var WithinGroups4 = /* @__PURE__ */ (function() {
+    function WithinGroups5() {
     }
     ;
-    WithinGroups4.value = new WithinGroups4();
-    return WithinGroups4;
+    WithinGroups5.value = new WithinGroups5();
+    return WithinGroups5;
   })();
-  var BetweenGroups3 = /* @__PURE__ */ (function() {
-    function BetweenGroups4() {
+  var BetweenGroups4 = /* @__PURE__ */ (function() {
+    function BetweenGroups5() {
     }
     ;
-    BetweenGroups4.value = new BetweenGroups4();
-    return BetweenGroups4;
+    BetweenGroups5.value = new BetweenGroups5();
+    return BetweenGroups5;
   })();
   var tick2 = tick_;
+  var syncPinsToWasm = /* @__PURE__ */ runEffectFn2(syncPinsToWasm_);
   var syncNodesToWasm = /* @__PURE__ */ runEffectFn2(syncNodesToWasm_);
   var syncNodesFromWasm = /* @__PURE__ */ runEffectFn2(syncNodesFromWasm_);
   var setVelocityRetention = setVelocityRetention_;
+  var setRectCollideThrough = /* @__PURE__ */ runEffectFn3(setRectCollideThrough_);
+  var setRectCollidePairs = function(sim) {
+    return function(force) {
+      return function(scope2) {
+        return function() {
+          return setRectCollidePairs_(sim, force, (function() {
+            if (scope2 instanceof AllPairs2) {
+              return 0;
+            }
+            ;
+            if (scope2 instanceof WithinGroups4) {
+              return 1;
+            }
+            ;
+            if (scope2 instanceof BetweenGroups4) {
+              return 2;
+            }
+            ;
+            throw new Error("Failed pattern match at Hylograph.ForceEngine.WASM (line 590, column 83 - line 593, column 21): " + [scope2.constructor.name]);
+          })());
+        };
+      };
+    };
+  };
   var setNodeCount = setNodeCount_;
   var setManyBodyScope = function(sim) {
     return function(force) {
@@ -9313,15 +9910,15 @@
               return 0;
             }
             ;
-            if (scope2 instanceof WithinGroups3) {
+            if (scope2 instanceof WithinGroups4) {
               return 1;
             }
             ;
-            if (scope2 instanceof BetweenGroups3) {
+            if (scope2 instanceof BetweenGroups4) {
               return 2;
             }
             ;
-            throw new Error("Failed pattern match at Hylograph.ForceEngine.WASM (line 570, column 77 - line 573, column 21): " + [scope2.constructor.name]);
+            throw new Error("Failed pattern match at Hylograph.ForceEngine.WASM (line 581, column 77 - line 584, column 21): " + [scope2.constructor.name]);
           })());
         };
       };
@@ -9337,6 +9934,7 @@
   var setForceHalfHeights = /* @__PURE__ */ runEffectFn3(setForceHalfHeights_);
   var setForceGaps = /* @__PURE__ */ runEffectFn3(setForceGaps_);
   var setForceDistances = /* @__PURE__ */ runEffectFn3(setForceDistances_);
+  var setDirectionalHard = /* @__PURE__ */ runEffectFn3(setDirectionalHard_);
   var setCollideFilter = /* @__PURE__ */ runEffectFn3(setCollideFilter_);
   var setCollideAlphaScaled = /* @__PURE__ */ runEffectFn3(setCollideAlphaScaled_);
   var setAlphaTarget = /* @__PURE__ */ runEffectFn2(setAlphaTarget_);
@@ -9483,13 +10081,11 @@
   };
 
   // output/Hylograph.ForceEngine.Setup.WASM/index.js
-  var pure10 = /* @__PURE__ */ pure(applicativeEffect);
+  var pure11 = /* @__PURE__ */ pure(applicativeEffect);
   var fromFoldable9 = /* @__PURE__ */ fromFoldable2(ordInt)(foldableArray);
   var apply13 = /* @__PURE__ */ apply(applyMaybe);
   var map24 = /* @__PURE__ */ map(functorMaybe);
   var lookup3 = /* @__PURE__ */ lookup(ordInt);
-  var when12 = /* @__PURE__ */ when(applicativeEffect);
-  var show3 = /* @__PURE__ */ show(showInt);
   var $$void5 = /* @__PURE__ */ $$void(functorEffect);
   var map111 = /* @__PURE__ */ map(functorArray);
   var fromFoldable12 = /* @__PURE__ */ fromFoldable(foldableList);
@@ -9498,13 +10094,15 @@
   var bind12 = /* @__PURE__ */ bind(bindMaybe);
   var for_4 = /* @__PURE__ */ for_(applicativeEffect);
   var for_12 = /* @__PURE__ */ for_4(foldableMaybe);
+  var when12 = /* @__PURE__ */ when(applicativeEffect);
   var for_22 = /* @__PURE__ */ for_4(foldableArray);
   var traverse4 = /* @__PURE__ */ traverse(traversableArray)(applicativeEffect);
   var map25 = /* @__PURE__ */ map(functorEffect);
   var tick3 = function(sim) {
     return function __do2() {
-      var alpha = tick2(sim.wasmSim)();
       var nodes = read(sim.nodesRef)();
+      syncPinsToWasm(sim.wasmSim)(nodes)();
+      var alpha = tick2(sim.wasmSim)();
       var updatedNodes = syncNodesFromWasm(sim.wasmSim)(nodes)();
       write(updatedNodes)(sim.nodesRef)();
       return alpha;
@@ -9526,11 +10124,7 @@
           })(lookup3(link.source)(indexOfId)))(lookup3(link.target)(indexOfId));
         };
         var resolved = mapMaybe(endpoints)(links);
-        var missing = length(links) - length(resolved) | 0;
-        return function __do2() {
-          when12(missing > 0)(warn("WASM Setup: " + (show3(missing) + " link(s) name a node id that is not in the simulation; left out")))();
-          return setLinks(wasmSim)(concat(resolved))();
-        };
+        return setLinks(wasmSim)(concat(resolved));
       };
     };
   };
@@ -9541,10 +10135,7 @@
     })(forces))));
   };
   var getNodes2 = function(sim) {
-    return function __do2() {
-      var nodes = read(sim.nodesRef)();
-      return syncNodesFromWasm(sim.wasmSim)(nodes)();
-    };
+    return read(sim.nodesRef);
   };
   var flatTargets = function(target5) {
     return concatMap(function(node) {
@@ -9557,7 +10148,7 @@
         return [nan, nan];
       }
       ;
-      throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 426, column 47 - line 428, column 26): " + [v.constructor.name]);
+      throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 478, column 47 - line 480, column 26): " + [v.constructor.name]);
     });
   };
   var create3 = function(nodes) {
@@ -9585,27 +10176,27 @@
         var perNode = function(value12) {
           return function(send) {
             if (value12 instanceof Static) {
-              return pure10(unit);
+              return pure11(unit);
             }
             ;
             if (value12 instanceof Dynamic) {
               return $$void5(send(map111(value12.value0)(nodes)));
             }
             ;
-            throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 399, column 24 - line 401, column 43): " + [value12.constructor.name]);
+            throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 451, column 24 - line 453, column 43): " + [value12.constructor.name]);
           };
         };
         var perLink = function(value12) {
           return function(send) {
             if (value12 instanceof Static) {
-              return pure10(unit);
+              return pure11(unit);
             }
             ;
             if (value12 instanceof Dynamic) {
               return $$void5(send(linkValues(value12)(ends)));
             }
             ;
-            throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 405, column 24 - line 407, column 53): " + [value12.constructor.name]);
+            throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 457, column 24 - line 459, column 53): " + [value12.constructor.name]);
           };
         };
         var groupsOf = function(group3) {
@@ -9644,17 +10235,17 @@
                   return unit;
                 }
                 ;
-                if (v.value0.scope instanceof WithinGroups2) {
+                if (v.value0.scope instanceof WithinGroups3) {
                   $$void5(setForceGroups(wasmSim)(force)(groupsOf(v.value0.scope.value0)))();
-                  return $$void5(setManyBodyScope(wasmSim)(force)(WithinGroups3.value))();
+                  return $$void5(setManyBodyScope(wasmSim)(force)(WithinGroups4.value))();
                 }
                 ;
-                if (v.value0.scope instanceof BetweenGroups2) {
+                if (v.value0.scope instanceof BetweenGroups3) {
                   $$void5(setForceGroups(wasmSim)(force)(groupsOf(v.value0.scope.value0)))();
-                  return $$void5(setManyBodyScope(wasmSim)(force)(BetweenGroups3.value))();
+                  return $$void5(setManyBodyScope(wasmSim)(force)(BetweenGroups4.value))();
                 }
                 ;
-                throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 278, column 5 - line 285, column 68): " + [v.value0.scope.constructor.name]);
+                throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 313, column 5 - line 320, column 68): " + [v.value0.scope.constructor.name]);
               })();
               return force;
             };
@@ -9764,6 +10355,27 @@
               })();
               perNode(v.value0.halfWidth)(setForceHalfWidths(wasmSim)(force))();
               perNode(v.value0.halfHeight)(setForceHalfHeights(wasmSim)(force))();
+              for_12(v.value0.filter)(function(keep) {
+                return $$void5(setCollideFilter(wasmSim)(force)(map111(keep)(nodes)));
+              })();
+              (function() {
+                if (v.value0.scope instanceof AllPairs) {
+                  return unit;
+                }
+                ;
+                if (v.value0.scope instanceof WithinGroups3) {
+                  $$void5(setForceGroups(wasmSim)(force)(groupsOf(v.value0.scope.value0)))();
+                  return $$void5(setRectCollidePairs(wasmSim)(force)(WithinGroups4.value))();
+                }
+                ;
+                if (v.value0.scope instanceof BetweenGroups3) {
+                  $$void5(setForceGroups(wasmSim)(force)(groupsOf(v.value0.scope.value0)))();
+                  return $$void5(setRectCollidePairs(wasmSim)(force)(BetweenGroups4.value))();
+                }
+                ;
+                throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 400, column 5 - line 407, column 71): " + [v.value0.scope.constructor.name]);
+              })();
+              when12(v.value0.throughSqueeze)($$void5(setRectCollideThrough(wasmSim)(force)(true)))();
               return force;
             };
           }
@@ -9787,7 +10399,7 @@
                   return $$void5(containmentAddPolygon(wasmSim)(force)(v1.value0));
                 }
                 ;
-                throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 368, column 20 - line 371, column 88): " + [v1.constructor.name]);
+                throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 413, column 20 - line 416, column 88): " + [v1.constructor.name]);
               })();
               $$void5(setForceRegions(wasmSim)(force)(map111(v.value0.region)(nodes)))();
               $$void5(setForceRadii(wasmSim)(force)((function() {
@@ -9799,7 +10411,29 @@
                   return map111(v.value0.radius.value0)(nodes);
                 }
                 ;
-                throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 373, column 45 - line 375, column 31): " + [v.value0.radius.constructor.name]);
+                throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 418, column 45 - line 420, column 31): " + [v.value0.radius.constructor.name]);
+              })()))();
+              $$void5(setForceHalfWidths(wasmSim)(force)((function() {
+                if (v.value0.halfWidth instanceof Static) {
+                  return map111($$const(v.value0.halfWidth.value0))(nodes);
+                }
+                ;
+                if (v.value0.halfWidth instanceof Dynamic) {
+                  return map111(v.value0.halfWidth.value0)(nodes);
+                }
+                ;
+                throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 421, column 50 - line 423, column 31): " + [v.value0.halfWidth.constructor.name]);
+              })()))();
+              $$void5(setForceHalfHeights(wasmSim)(force)((function() {
+                if (v.value0.halfHeight instanceof Static) {
+                  return map111($$const(v.value0.halfHeight.value0))(nodes);
+                }
+                ;
+                if (v.value0.halfHeight instanceof Dynamic) {
+                  return map111(v.value0.halfHeight.value0)(nodes);
+                }
+                ;
+                throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 424, column 51 - line 426, column 31): " + [v.value0.halfHeight.constructor.name]);
               })()))();
               return force;
             };
@@ -9825,16 +10459,17 @@
               })();
               perLink(v.value0.gap)(setForceGaps(wasmSim)(force))();
               perLink(v.value0.strength)(setForceStrengths(wasmSim)(force))();
+              when12(v.value0.hard)($$void5(setDirectionalHard(wasmSim)(force)(true)))();
               return force;
             };
           }
           ;
-          throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 268, column 31 - line 394, column 15): " + [v.constructor.name]);
+          throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 303, column 31 - line 446, column 15): " + [v.constructor.name]);
         };
       };
     };
   };
-  var applySetup2 = function(setupConfig) {
+  var applyChecked = function(setupConfig) {
     return function(sim) {
       return function __do2() {
         var nodes = read(sim.nodesRef)();
@@ -9859,6 +10494,40 @@
         setAlphaDecay(sim.wasmSim)(params.alphaDecay)();
         setAlphaTarget(sim.wasmSim)(params.alphaTarget)();
         return setVelocityRetention(sim.wasmSim)(params.velocityRetention)();
+      };
+    };
+  };
+  var tryApplySetup2 = function(setupConfig) {
+    return function(sim) {
+      return function __do2() {
+        var nodes = read(sim.nodesRef)();
+        var links = read(sim.linksRef)();
+        var v = linkProblem(setupConfig)(nodes)(links);
+        if (v instanceof Just) {
+          return new Left(v.value0);
+        }
+        ;
+        if (v instanceof Nothing) {
+          return map25(Right.create)(applyChecked(setupConfig)(sim))();
+        }
+        ;
+        throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 255, column 3 - line 257, column 54): " + [v.constructor.name]);
+      };
+    };
+  };
+  var applySetup2 = function(setupConfig) {
+    return function(sim) {
+      return function __do2() {
+        var outcome = tryApplySetup2(setupConfig)(sim)();
+        if (outcome instanceof Left) {
+          return $$throw("Hylograph.ForceEngine.Setup: " + (outcome.value0 + ". Nothing was applied."))();
+        }
+        ;
+        if (outcome instanceof Right) {
+          return unit;
+        }
+        ;
+        throw new Error("Failed pattern match at Hylograph.ForceEngine.Setup.WASM (line 239, column 3 - line 241, column 25): " + [outcome.constructor.name]);
       };
     };
   };
@@ -9991,7 +10660,7 @@
   })();
 
   // output/Hylograph.HATS/index.js
-  var show4 = /* @__PURE__ */ show(showNumber);
+  var show3 = /* @__PURE__ */ show(showNumber);
   var DepthFirst = /* @__PURE__ */ (function() {
     function DepthFirst2() {
     }
@@ -10202,7 +10871,7 @@
   var thunkedNum = function(name15) {
     return function(value12) {
       return new ThunkedAttr(name15, function(v) {
-        return show4(value12);
+        return show3(value12);
       });
     };
   };
@@ -10313,7 +10982,7 @@
     }
   };
   var identity5 = new ZoomTransform(1, 0, 0);
-  function constrain4(transform, extent, translateExtent) {
+  function constrain5(transform, extent, translateExtent) {
     const dx0 = transform.invertX(extent[0][0]) - translateExtent[0][0];
     const dx1 = transform.invertX(extent[1][0]) - translateExtent[1][0];
     const dy0 = transform.invertY(extent[0][1]) - translateExtent[0][1];
@@ -10406,7 +11075,7 @@
         const k = Math.max(scaleMin, Math.min(scaleMax, newTransform.k));
         newTransform = new ZoomTransform(k, newTransform.x, newTransform.y);
         if (translateExtent) {
-          newTransform = constrain4(newTransform, getExtent(), translateExtent);
+          newTransform = constrain5(newTransform, getExtent(), translateExtent);
         }
         transform = newTransform;
         applyTransform();
@@ -11994,7 +12663,7 @@
   var map26 = /* @__PURE__ */ map(functorArray);
   var bind3 = /* @__PURE__ */ bind(bindEffect);
   var traverse_2 = /* @__PURE__ */ traverse_(applicativeEffect)(foldableArray);
-  var pure11 = /* @__PURE__ */ pure(applicativeEffect);
+  var pure12 = /* @__PURE__ */ pure(applicativeEffect);
   var unwrap2 = /* @__PURE__ */ unwrap();
   var map112 = /* @__PURE__ */ map(functorMaybe);
   var map27 = /* @__PURE__ */ map(functorEffect);
@@ -12501,7 +13170,7 @@
                       to: toVal
                     };
                     if ($128.from instanceof Just && $128.to instanceof Just) {
-                      return pure11(new Just({
+                      return pure12(new Just({
                         attrName: v.value0,
                         from: $128.from.value0,
                         to: $128.to.value0,
@@ -12512,7 +13181,7 @@
                       }));
                     }
                     ;
-                    return pure11(Nothing.value);
+                    return pure12(Nothing.value);
                   }
                   ;
                   if (v instanceof ThunkedAttr) {
@@ -12523,7 +13192,7 @@
                       to: toVal
                     };
                     if ($135.from instanceof Just && $135.to instanceof Just) {
-                      return pure11(new Just({
+                      return pure12(new Just({
                         attrName: v.value0,
                         from: $135.from.value0,
                         to: $135.to.value0,
@@ -12534,7 +13203,7 @@
                       }));
                     }
                     ;
-                    return pure11(Nothing.value);
+                    return pure12(Nothing.value);
                   }
                   ;
                   throw new Error("Failed pattern match at Hylograph.HATS.InterpreterTick (line 430, column 59 - line 443, column 26): " + [v.constructor.name]);
@@ -12554,7 +13223,7 @@
             return function(phaseSpec) {
               return function(idx) {
                 if (phaseSpec.transition instanceof Nothing) {
-                  return pure11([]);
+                  return pure12([]);
                 }
                 ;
                 if (phaseSpec.transition instanceof Just) {
@@ -12575,7 +13244,7 @@
           return function(phaseSpec) {
             return function(idx) {
               if (phaseSpec.transition instanceof Nothing) {
-                return pure11([]);
+                return pure12([]);
               }
               ;
               if (phaseSpec.transition instanceof Just) {
@@ -12596,7 +13265,7 @@
             return function(phaseSpec) {
               return function(idx) {
                 if (phaseSpec.transition instanceof Nothing) {
-                  return pure11([]);
+                  return pure12([]);
                 }
                 ;
                 if (phaseSpec.transition instanceof Just) {
@@ -12628,7 +13297,7 @@
             if (v instanceof StaticAttr) {
               var v1 = fromString(v.value1);
               if (v1 instanceof Just) {
-                return pure11(unit);
+                return pure12(unit);
               }
               ;
               if (v1 instanceof Nothing) {
@@ -12642,7 +13311,7 @@
               var value12 = v.value1(unit);
               var v1 = fromString(value12);
               if (v1 instanceof Just) {
-                return pure11(unit);
+                return pure12(unit);
               }
               ;
               if (v1 instanceof Nothing) {
@@ -12829,7 +13498,7 @@
         var goWithDatum = function(p) {
           return function(v) {
             if (v instanceof Empty2) {
-              return pure11(emptyResult);
+              return pure12(emptyResult);
             }
             ;
             if (v instanceof Elem) {
@@ -12895,7 +13564,7 @@
           return function(domIdx) {
             return function(v) {
               if (v instanceof Empty2) {
-                return pure11({
+                return pure12({
                   result: emptyResult,
                   elementsCreated: 0
                 });
@@ -12988,7 +13657,7 @@
                           throw new Error("Failed pattern match at Hylograph.HATS.InterpreterTick (line 174, column 16 - line 187, column 27): " + [spec.gup.constructor.name]);
                         }
                         ;
-                        return pure11(Nothing.value);
+                        return pure12(Nothing.value);
                       };
                     })(existingKeysAndEls)();
                     var updateTransitions = traverseWithIndex2(function(updateIdx) {
@@ -13050,13 +13719,13 @@
                           }
                           ;
                           if (v2 instanceof Nothing) {
-                            return pure11(Nothing.value);
+                            return pure12(Nothing.value);
                           }
                           ;
                           throw new Error("Failed pattern match at Hylograph.HATS.InterpreterTick (line 194, column 16 - line 227, column 36): " + [v2.constructor.name]);
                         }
                         ;
-                        return pure11(Nothing.value);
+                        return pure12(Nothing.value);
                       };
                     })(existingKeysAndEls)();
                     var enterItems = filter(function(d) {
@@ -13333,7 +14002,7 @@
 
   // output/Test.PSD3VisualTest/index.js
   var discard2 = /* @__PURE__ */ discard(discardUnit);
-  var show5 = /* @__PURE__ */ show(showInt);
+  var show4 = /* @__PURE__ */ show(showInt);
   var show1 = /* @__PURE__ */ show(/* @__PURE__ */ showArray(showString));
   var map28 = /* @__PURE__ */ map(functorArray);
   var $$void7 = /* @__PURE__ */ $$void(functorEffect);
@@ -13363,7 +14032,7 @@
   var simulationTree = function(color) {
     return function(nodes) {
       return forEach("sim-nodes")(Circle.value)(nodes)(function(n) {
-        return show5(n.id);
+        return show4(n.id);
       })(function(node) {
         return elem2(Circle.value)([thunkedNum("cx")(node.x), thunkedNum("cy")(node.y), staticStr("r")("12"), staticStr("fill")(color)])([]);
       });

@@ -2,8 +2,8 @@ workspace:
   packageSet:
     registry: 80.8.0
   extraPackages:
-    hylograph-forces-pure:
-      path: ../purescript-hylograph-forces-pure
+    hylograph-forces:
+      path: ../purescript-hylograph-forces
 
 package:
   name: hylograph-simulation
@@ -23,7 +23,7 @@ package:
     - exceptions: ">=6.1.0 <7.0.0"
     - foldable-traversable: ">=6.0.0 <7.0.0"
     - foreign-object: ">=4.1.0 <5.0.0"
-    - hylograph-forces-pure: "*"
+    - hylograph-forces: "*"
     - hylograph-selection: ">=0.5.0 <0.6.0"
     - hylograph-transitions: ">=0.1.0 <0.2.0"
     - integers: ">=6.0.0 <7.0.0"

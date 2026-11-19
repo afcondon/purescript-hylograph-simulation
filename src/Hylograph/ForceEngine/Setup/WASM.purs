@@ -396,6 +396,16 @@ addForce wasmSim nodes ends = case _ of
       }
     perNode c.halfWidth (FFI.setForceHalfWidths wasmSim force)
     perNode c.halfHeight (FFI.setForceHalfHeights wasmSim force)
+    for_ c.filter \keep -> void $ FFI.setCollideFilter wasmSim force (map keep nodes)
+    case c.scope of
+      AllPairs -> pure unit
+      WithinGroups group -> do
+        void $ FFI.setForceGroups wasmSim force (groupsOf group)
+        void $ FFI.setRectCollidePairs wasmSim force FFI.WithinGroups
+      BetweenGroups group -> do
+        void $ FFI.setForceGroups wasmSim force (groupsOf group)
+        void $ FFI.setRectCollidePairs wasmSim force FFI.BetweenGroups
+    when c.throughSqueeze $ void $ FFI.setRectCollideThrough wasmSim force true
     pure force
 
   ContainForce c -> do
@@ -407,6 +417,12 @@ addForce wasmSim nodes ends = case _ of
     void $ FFI.setForceRegions wasmSim force (map c.region nodes)
     void $ FFI.setForceRadii wasmSim force (case c.radius of
       Static radius -> map (const radius) nodes
+      Dynamic f -> map f nodes)
+    void $ FFI.setForceHalfWidths wasmSim force (case c.halfWidth of
+      Static extent -> map (const extent) nodes
+      Dynamic f -> map f nodes)
+    void $ FFI.setForceHalfHeights wasmSim force (case c.halfHeight of
+      Static extent -> map (const extent) nodes
       Dynamic f -> map f nodes)
     pure force
 
@@ -426,6 +442,7 @@ addForce wasmSim nodes ends = case _ of
       }
     perLink c.gap (FFI.setForceGaps wasmSim force)
     perLink c.strength (FFI.setForceStrengths wasmSim force)
+    when c.hard $ void $ FFI.setDirectionalHard wasmSim force true
     pure force
   where
   -- A Dynamic value becomes one number per node; a Static one is already

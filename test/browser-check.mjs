@@ -115,8 +115,8 @@ try {
   // A. The Force Playground
   // -------------------------------------------------------------------------
   const bundle = readFileSync(join(demo, 'bundle.js'), 'utf8');
-  check(!/node_modules\/d3-|d3-force|d3-drag|d3-selection|d3-quadtree/.test(bundle) && bundle.includes('Hylograph.Forces.Pure'),
-    `the demo's bundle (${(bundle.length / 1024).toFixed(0)} KB) names no D3 module, and contains hylograph-forces-pure`);
+  check(!/node_modules\/d3-|d3-force|d3-drag|d3-selection|d3-quadtree/.test(bundle) && bundle.includes('Hylograph.Forces'),
+    `the demo's bundle (${(bundle.length / 1024).toFixed(0)} KB) names no D3 module, and contains hylograph-forces`);
 
   // A page with a seeded Math.random that counts its calls.
   const open = async () => {

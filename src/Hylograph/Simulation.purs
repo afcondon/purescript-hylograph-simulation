@@ -2,7 +2,7 @@
 -- |
 -- | High-level API for running force-directed simulations.
 -- | Two engines with the same interface: the default, in PureScript
--- | (`hylograph-forces-pure`, no D3), and the Rust/WASM kernel.
+-- | (`hylograph-forces`, no D3), and the Rust/WASM kernel.
 -- |
 -- | ## Quick Start
 -- |
@@ -132,7 +132,7 @@ type PositionMap = ForceSim.PositionMap
 
 -- | Which engine runs the forces.
 -- |
--- | - `Pure`: the default. `hylograph-forces-pure`: d3-force's forces bit for
+-- | - `Pure`: the default. `hylograph-forces`: d3-force's forces bit for
 -- |   bit and the Rust kernel's additions, in PureScript. Nothing to load,
 -- |   no D3.
 -- | - `WASM`: the Rust/WASM kernel, the fast path. Needs `initWASM` first.

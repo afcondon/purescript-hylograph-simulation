@@ -6,7 +6,7 @@
 -- | - Running the animation loop
 -- | - Handling tick callbacks for rendering
 -- |
--- | The forces are PureScript (`hylograph-forces-pure`: d3-force's seven,
+-- | The forces are PureScript (`hylograph-forces`: d3-force's seven,
 -- | bit for bit, and the Rust kernel's additions). There is no D3 here. Each
 -- | simulation has its own seeded generator for separating coincident nodes,
 -- | so the same nodes, links and forces give the same layout every time.
@@ -256,7 +256,13 @@ createWithCallbacks config cbs = do
     }
 
 -- | Set the nodes for the simulation
--- | This initializes the nodes and makes every force again for them
+-- | This initializes the nodes and makes every force again for them.
+-- |
+-- | The simulation adopts these records: it writes into them (an index, a
+-- | place for a node without one, and then every tick's positions and
+-- | velocities), as d3 does, and `getNodes` returns these same records.
+-- | Drag, and a DOM bound to the nodes, rely on that. For nodes as values,
+-- | the same on both engines, use `Hylograph.Simulation.Stepped`.
 setNodes :: forall row linkRow.
   Array (SimulationNode row)
   -> Simulation row linkRow
@@ -552,7 +558,8 @@ getAlpha :: forall row linkRow.
   -> Effect Number
 getAlpha sim = Ref.read sim.alpha
 
--- | Get the current nodes (with updated positions)
+-- | Get the current nodes (with updated positions): the records given to
+-- | `setNodes`, moved in place, the same ones every time.
 getNodes :: forall row linkRow.
   Simulation row linkRow
   -> Effect (Array (SimulationNode row))

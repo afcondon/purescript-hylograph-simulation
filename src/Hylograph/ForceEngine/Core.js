@@ -1,7 +1,7 @@
 // Force Engine Core FFI
 //
 // What is left here is the browser: the animation frame and two kinds of
-// drag. The forces themselves are PureScript (hylograph-forces-pure); there
+// drag. The forces themselves are PureScript (hylograph-forces); there
 // is no D3 in this file or anywhere else in the library.
 
 // =============================================================================

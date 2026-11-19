@@ -1,6 +1,6 @@
 # purescript-hylograph-simulation
 
-Force-directed graph simulation: the library's own simulation loop over a replaceable force kernel. The default kernel is PureScript ([hylograph-forces-pure](https://github.com/afcondon/purescript-hylograph-forces-pure): d3-force's forces, and six more); a Rust/WASM kernel is the fast path. There is no D3 in this library.
+Force-directed graph simulation: the library's own simulation loop over a replaceable force kernel. The default kernel is PureScript ([hylograph-forces](https://github.com/afcondon/purescript-hylograph-forces): d3-force's forces, and six more); a Rust/WASM kernel is the fast path. There is no D3 in this library.
 
 Live interactive demo can be seen as part of the [suite of Hylograph library demos](https://afcondon.github.io/purescript-hylograph-demos/). Click the screenshot below for the **Force Playground**.
 
@@ -58,8 +58,8 @@ spago install hylograph-simulation
 ```
 
 In this checkout the default kernel is a path dependency
-(`../purescript-hylograph-forces-pure`, unpublished), so a workspace that
-takes this library by path has to list `hylograph-forces-pure` in its own
+(`../purescript-hylograph-forces`, unpublished), so a workspace that
+takes this library by path has to list `hylograph-forces` in its own
 `extraPackages` too.
 
 ## No D3
@@ -68,7 +68,7 @@ Until 2026-11-18 the force calculations here were d3-force's functions and
 dragging went through d3-drag. Neither is used now, and the library has no
 npm dependencies.
 
-The forces are `hylograph-forces-pure`: d3-force 3.0.0's seven forces ported
+The forces are `hylograph-forces`: d3-force 3.0.0's seven forces ported
 to PureScript and held to d3-force bit for bit by a differential test (same
 nodes, same parameters, every value of every node compared after every tick),
 plus the forces the Rust kernel added (towards, rectangle collision,
@@ -129,7 +129,7 @@ interleaved runs):
 | 10,000 | 46 | 12.6 |
 
 The WASM engine is 3 to 4 times faster. The default engine is about where
-d3-force's own functions are in the same loop (hylograph-forces-pure's README
+d3-force's own functions are in the same loop (hylograph-forces's README
 has that comparison, and the figures under `purs-backend-es`, which are
 about a third lower). Not measured in a browser.
 
@@ -201,9 +201,64 @@ useEffect(() => {
 `manyBody` can be scoped to pairs within a group or between groups, and
 `collide` can take a filter and a strength that follows alpha.
 
+`rectCollide` takes a filter (`withFilter`) and the same scoping by group
+(`withinGroups`, `betweenGroups`: labels against dots, say, and not each
+other). A pinned rectangle is never moved by it, and what overlaps a pinned
+rectangle takes the whole push. With `withThroughSqueeze true`, a rectangle
+pushed from both sides on an axis goes through one of them instead of
+staying where the pushes cancel, which is what resolves crowded wide
+rectangles (labels among dots); it wants nothing else pressing them
+together, so let any pull cool to nothing. `contain` keeps a rectangle
+inside by its half-extents (`withHalfWidth`, `withHalfHeight`) as well as a
+circle by its radius. `directional` with `withHardLimit true` keeps exactly
+the gap asked for: after each tick a link short of its gap has its target
+moved along the axis by the shortfall. The rules in full are with the
+kernels (`Hylograph.Forces.RectCollide`, `.Contain`, `.Directional`).
+
+## Stepping it yourself: one handle, either engine
+
+`runSimulation` owns the clock. When you do (a timeline to scrub, a layout
+computed before anything is drawn, a test), use
+`Hylograph.Simulation.Stepped`:
+
+```purescript
+import Hylograph.Simulation.Stepped as Stepped
+
+sim <- Stepped.create Stepped.Default setup nodes links   -- or Stepped.Rust, after initWasm
+nodes1 <- sim.step                       -- one tick; the nodes where it left them
+still <- sim.settled { step: 0.05, acceleration: 0.05 }
+moment <- sim.snapshot                   -- carries its tick, the nodes, the links, the setup
+sim.pin 7 (Just { x: 100.0, y: 50.0 })   -- hold node 7; Nothing lets it go
+_ <- sim.retarget "home" newTargets      -- a Towards force's targets
+sim.applySetup otherSetup                -- other forces and parameters, still moving
+nodes2 <- sim.restore moment             -- the ticks that follow are the ones that followed
+```
+
+The record is the same on both engines and means the same: `step`, `nodes`,
+`links`, `alpha`, `tick`, `cooled`, `settled`, `kineticEnergy`,
+`maxDisplacement`, `maxAcceleration`, `applySetup`, `retarget`, `pin`,
+`snapshot`, `restore`, `free`. `test/stepped.mjs` runs every one on both.
+
+**Whose records are the nodes?** Through this handle they are values:
+`create` copies what it is given and never writes into it, and every `step`
+returns new records. A pin written on the records most recently returned
+(`fx`, `fy`, as a drag does) is read by the next step. Underneath, the
+engines differ, on purpose: `Hylograph.ForceEngine.Simulation` (the default
+engine's own loop) adopts the records passed to `setNodes`, moves them in
+place and returns the same records from `getNodes` every time, as d3 does,
+which is what drag and a DOM bound to the nodes rely on;
+`Hylograph.ForceEngine.Setup.WASM` keeps its numbers in the kernel and
+returns new records after each tick. If you use those modules directly, that
+is the difference to mind; `Stepped` is where they are made the same.
+
+`applySetup` applies all of a setup's parameters on both engines (alpha,
+alphaMin, alphaDecay, alphaTarget, velocityRetention), and through the handle
+alpha is zero once it has cooled below `alphaMin` on both.
+
 ## Modules
 
 - `Hylograph.Simulation` - High-level API (recommended)
+- `Hylograph.Simulation.Stepped` - One caller-stepped handle over both engines: step, settle, snapshot, restore, pin
 - `Hylograph.Simulation.Emitter` - Framework-agnostic event system
 - `Hylograph.ForceEngine.Setup` - Declarative force configuration
 - `Hylograph.ForceEngine.Simulation` - Low-level simulation control (the library's own loop)
@@ -216,11 +271,12 @@ useEffect(() => {
 spago test                      # the pure computations
 node test/engine-parity.mjs     # one Setup through both engines, compared
 node test/wasm-engine-api.mjs   # the WASM engine's PureScript API
+node test/stepped.mjs           # the stepped handle, every function on both engines
 node test/browser-check.mjs     # headless Chrome: the Force Playground demo, and the three drags
 node test/timing.mjs            # ms per tick on each engine
 ```
 
-The last four read the compiled `output/`, the shipped kernel in
+The last five read the compiled `output/`, the shipped kernel in
 `purescript-hylograph-showcases/wasm-force-demo/pkg`, and (the browser check)
 the bundled demo in `purescript-hylograph-demos/simulation`.
 

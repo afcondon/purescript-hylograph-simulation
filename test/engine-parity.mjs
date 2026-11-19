@@ -1,10 +1,10 @@
 // Does one declarative Setup mean the same thing to the library's two
-// engines: the default one (PureScript, hylograph-forces-pure) and the
+// engines: the default one (PureScript, hylograph-forces) and the
 // Rust/WASM kernel?
 //
 //   spago build && node test/engine-parity.mjs
 //
-// The forces themselves are checked elsewhere, exactly: hylograph-forces-pure
+// The forces themselves are checked elsewhere, exactly: hylograph-forces
 // against d3-force and against the kernel at f64 (its test/differential.mjs).
 // This checks the layer above, the PureScript that turns a `Setup` into
 // forces (`Hylograph.ForceEngine.Setup.recipe`) and into kernel calls

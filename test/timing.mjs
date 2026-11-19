@@ -3,7 +3,7 @@
 //   spago build && node test/timing.mjs [--runs 3] [--sizes 100,1000,10000] [--es <dir>]
 //
 // The same Setup (many-body -30 at theta 0.9, links at distance 30 with
-// d3's degree strength, centring), the same graph as hylograph-forces-pure's
+// d3's degree strength, centring), the same graph as hylograph-forces's
 // timing (a ring with chords on d3's phyllotaxis spiral), 300 ticks:
 //
 //   default engine   Hylograph.ForceEngine.Simulation.tick, the forces in
