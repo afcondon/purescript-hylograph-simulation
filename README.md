@@ -57,10 +57,25 @@ main = do
 spago install hylograph-simulation
 ```
 
-In this checkout the default kernel is a path dependency
-(`../purescript-hylograph-forces`, unpublished), so a workspace that
-takes this library by path has to list `hylograph-forces` in its own
-`extraPackages` too.
+Its kernel, `hylograph-forces`, and `hylograph-selection` 0.6 were published
+after package set 80.8.0 was cut. If your package set does not have them
+yet, name them in your workspace:
+
+```yaml
+workspace:
+  extraPackages:
+    hylograph-simulation: "1.0.0"
+    hylograph-forces: "0.1.0"
+    hylograph-selection: "0.6.0"
+```
+
+**The WASM engine is optional and its module is not in this package.** The
+default engine needs nothing loaded. To use `engine: WASM` (or
+`Stepped.Rust`), build the module from its source,
+[hylograph-force-kernel](https://github.com/afcondon/hylograph-force-kernel)
+(`wasm-pack build --target web`; its README has the steps), serve the
+resulting `pkg/` directory beside your page, and call `initWasm` with the URL
+of `force_kernel.js` before creating a simulation.
 
 ## No D3
 
@@ -133,12 +148,10 @@ d3-force's own functions are in the same loop (hylograph-forces's README
 has that comparison, and the figures under `purs-backend-es`, which are
 about a third lower). Not measured in a browser.
 
-The D3 kernel that this library used to carry is still available, packaged
-separately as
-[hylograph-d3-kernel](https://github.com/afcondon/purescript-hylograph-d3-kernel)
-over `hylograph-simulation-core`, as is
-[hylograph-wasm-kernel](https://github.com/afcondon/purescript-hylograph-wasm-kernel).
-This package does not depend on either.
+The D3 kernel that this library used to carry was packaged separately as
+[hylograph-d3-kernel](https://github.com/afcondon/purescript-hylograph-d3-kernel),
+which is now deprecated: this library replaces it. This package depends on
+neither it nor `hylograph-wasm-kernel`.
 
 ## Features
 
@@ -230,14 +243,19 @@ still <- sim.settled { step: 0.05, acceleration: 0.05 }
 moment <- sim.snapshot                   -- carries its tick, the nodes, the links, the setup
 sim.pin 7 (Just { x: 100.0, y: 50.0 })   -- hold node 7; Nothing lets it go
 _ <- sim.retarget "home" newTargets      -- a Towards force's targets
+_ <- sim.reradius "bump" newRadius       -- a Collide, Radial or Contain force's radii
+sim.relink otherLinks                    -- other links between the same nodes
+sim.reheat                               -- alpha back to one
+nodes10 <- sim.advance 10                -- ten ticks, exactly as ten steps
 sim.applySetup otherSetup                -- other forces and parameters, still moving
 nodes2 <- sim.restore moment             -- the ticks that follow are the ones that followed
 ```
 
-The record is the same on both engines and means the same: `step`, `nodes`,
-`links`, `alpha`, `tick`, `cooled`, `settled`, `kineticEnergy`,
-`maxDisplacement`, `maxAcceleration`, `applySetup`, `retarget`, `pin`,
-`snapshot`, `restore`, `free`. `test/stepped.mjs` runs every one on both.
+The record is the same on both engines and means the same: `step`,
+`advance`, `nodes`, `links`, `alpha`, `tick`, `cooled`, `settled`,
+`kineticEnergy`, `maxDisplacement`, `maxAcceleration`, `applySetup`,
+`retarget`, `reradius`, `relink`, `reheat`, `pin`, `snapshot`, `restore`,
+`free`. `test/stepped.mjs` runs every one on both.
 
 **Whose records are the nodes?** Through this handle they are values:
 `create` copies what it is given and never writes into it, and every `step`
@@ -276,9 +294,13 @@ node test/browser-check.mjs     # headless Chrome: the Force Playground demo, an
 node test/timing.mjs            # ms per tick on each engine
 ```
 
-The last five read the compiled `output/`, the shipped kernel in
-`purescript-hylograph-showcases/wasm-force-demo/pkg`, and (the browser check)
-the bundled demo in `purescript-hylograph-demos/simulation`.
+The last five read the compiled `output/` and the WASM kernel: set
+`KERNEL_PKG` to a `pkg/` directory built from
+[hylograph-force-kernel](https://github.com/afcondon/hylograph-force-kernel)
+(without it they look where the author's workspace keeps one). The browser
+check also needs the bundled Force Playground from
+[purescript-hylograph-demos](https://github.com/afcondon/purescript-hylograph-demos)
+checked out beside this repository, and puppeteer-core.
 
 ## Part of Hylograph
 

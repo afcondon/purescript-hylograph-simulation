@@ -92,7 +92,7 @@ writeFileSync(join(scratch, 'handle-entry.js'), `
 `);
 execFileSync('esbuild', [join(scratch, 'handle-entry.js'), '--bundle', '--format=esm', `--outfile=${join(scratch, 'handle.js')}`, '--log-level=warning']);
 writeFileSync(join(scratch, 'handle.html'), '<!doctype html><body style="margin:0"><svg width="900" height="500"></svg><script type="module" src="handle.js"></script></body>');
-const kernel = join(homedir(), 'work/afc-work/purescript-hylograph-showcases/wasm-force-demo/pkg');
+const kernel = process.env.KERNEL_PKG || join(homedir(), 'work/afc-work/purescript-hylograph-showcases/wasm-force-demo/pkg');
 writeFileSync(join(scratch, 'index.html'), '<!doctype html><body style="margin:0"><svg width="1200" height="700"></svg><script src="drag.js"></script></body>');
 
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.wasm': 'application/wasm' };

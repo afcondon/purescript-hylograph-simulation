@@ -44,7 +44,8 @@ globalThis.fetch = async (url, ...rest) => {
   if (!href.startsWith('file:')) return realFetch(url, ...rest);
   return new Response(readFileSync(fileURLToPath(href)), { headers: { 'content-type': 'application/wasm' } });
 };
-const kernelUrl = pathToFileURL(join(homedir(), 'work/afc-work/purescript-hylograph-showcases/wasm-force-demo/pkg/force_kernel.js')).href;
+// KERNEL_PKG: a `wasm-pack build --target web` output of hylograph-force-kernel.
+const kernelUrl = pathToFileURL(join(process.env.KERNEL_PKG || join(homedir(), 'work/afc-work/purescript-hylograph-showcases/wasm-force-demo/pkg'), 'force_kernel.js')).href;
 const { initWasm_ } = await import(pathToFileURL(join(here, '..', 'output', 'Hylograph.ForceEngine.WASM/foreign.js')));
 const log = console.log; console.log = () => {};
 await new Promise((done, failed) => initWasm_(kernelUrl)(failed, done));

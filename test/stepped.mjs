@@ -16,7 +16,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const output = join(here, '../output');
-const kernel = join(here, '../../../purescript-hylograph-showcases/wasm-force-demo/pkg/force_kernel.js');
+// KERNEL_PKG: a `wasm-pack build --target web` output of hylograph-force-kernel.
+const kernel = join(process.env.KERNEL_PKG || join(here, '../../../purescript-hylograph-showcases/wasm-force-demo/pkg'), 'force_kernel.js');
 const ps = (module) => import(pathToFileURL(join(output, module, 'index.js')));
 const Setup = await ps('Hylograph.ForceEngine.Setup');
 const Stepped = await ps('Hylograph.Simulation.Stepped');

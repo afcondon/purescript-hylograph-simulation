@@ -2,8 +2,9 @@ workspace:
   packageSet:
     registry: 80.8.0
   extraPackages:
-    hylograph-forces:
-      path: ../purescript-hylograph-forces
+    # Published after package set 80.8.0 was cut.
+    hylograph-forces: "0.1.0"
+    hylograph-selection: "0.6.0"
 
 package:
   name: hylograph-simulation
@@ -23,8 +24,9 @@ package:
     - exceptions: ">=6.1.0 <7.0.0"
     - foldable-traversable: ">=6.0.0 <7.0.0"
     - foreign-object: ">=4.1.0 <5.0.0"
-    - hylograph-forces: "*"
-    - hylograph-selection: ">=0.5.0 <0.6.0"
+    - functions: ">=6.0.0 <7.0.0"
+    - hylograph-forces: ">=0.1.0 <0.2.0"
+    - hylograph-selection: ">=0.6.0 <0.7.0"
     - hylograph-transitions: ">=0.1.0 <0.2.0"
     - integers: ">=6.0.0 <7.0.0"
     - maybe: ">=6.0.0 <7.0.0"
@@ -46,4 +48,4 @@ package:
       - affjax
       - affjax-web
       - argonaut
-      - argonaut-codecs
+      - strings
