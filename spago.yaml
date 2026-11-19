@@ -9,7 +9,7 @@ package:
   name: hylograph-simulation
   description: Force-directed graph simulation in PureScript, with an optional Rust/WASM kernel
   publish:
-    version: 0.6.0
+    version: 1.0.0
     license: MIT
     location:
       githubOwner: afcondon

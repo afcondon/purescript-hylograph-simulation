@@ -17,7 +17,7 @@
 -- | - `retarget` gives a Towards force new targets and `reradius` gives a
 -- |   Collide, Radial or Contain force new radii, without applying the
 -- |   setup again; `reheat` puts alpha back to one; `pin` holds or lets go
--- |   of one node;
+-- |   of one node; `relink` puts other links between the same nodes;
 -- | - `applySetup` changes the forces and parameters and keeps the nodes
 -- |   moving.
 -- |
@@ -128,6 +128,11 @@ type Stepped row =
   -- | New radii for the Collide, Radial or Contain force of this name.
   -- | False if the setup has none.
   , reradius :: String -> (SimulationNode row -> Number) -> Effect Boolean
+  -- | Other links between the same nodes, which stay where they are and
+  -- | keep moving; alpha is what it was. Throws, changing nothing, if the
+  -- | setup has a force along the links and a link names a node that is
+  -- | not there.
+  , relink :: Array Link -> Effect Unit
   -- | Alpha back to one, so that forces scaled by it push again. Changes
   -- | nothing else: not the forces, the nodes or the tick count.
   , reheat :: Effect Unit
@@ -320,6 +325,12 @@ createDefault firstSetup firstNodes firstLinks = do
             Setup.addForceToSim changed.force simulation
             Ref.write changed.setup current
             pure true
+    , relink: \links -> do
+        own <- pinsIn
+        setup <- Ref.read current
+        case Setup.linkProblem setup own links of
+          Just problem -> throw ("Hylograph.Simulation.Stepped: " <> problem <> ". Nothing was changed.")
+          Nothing -> Default.setLinks links simulation
     , reheat: Ref.write 1.0 simulation.alpha
     , pin: \id at -> do
         Default.getNodes simulation >>= pinById id at
@@ -422,6 +433,21 @@ createRust firstSetup firstNodes firstLinks = do
             Ref.write changed.setup current
             simulation <- Ref.read held
             Wasm.reradius name radius simulation
+    , relink: \links -> do
+        simulation <- Ref.read held
+        setup <- Ref.read current
+        own <- Wasm.getNodes simulation
+        case Setup.linkProblem setup own links of
+          Just problem -> throw ("Hylograph.Simulation.Stepped: " <> problem <> ". Nothing was changed.")
+          Nothing -> do
+            -- The kernel takes the links, and the forces along them are
+            -- made again by applying the setup, which also sets alpha to
+            -- the setup's: put back what it was.
+            before <- Wasm.getAlpha simulation
+            Wasm.relink links simulation
+            Wasm.applySetup setup simulation
+            Kernel.setAlpha simulation.wasmSim before
+            Ref.write links kept
     , reheat: Ref.read held >>= Wasm.reheat
     , pin: \id at -> handOut >>= pinById id at
     , snapshot: do

@@ -63,6 +63,7 @@ module Hylograph.ForceEngine.Setup.WASM
   , applySetupWithData
 
     -- * Morphing, snapshots, convergence
+  , relink
   , retarget
   , retargetTo
   , reradius
@@ -586,6 +587,19 @@ toSimpleLinks = identity
 -- =============================================================================
 -- Morphing, snapshots, convergence
 -- =============================================================================
+
+-- | Other links between the same nodes. A link to a node that is not there
+-- | is dropped here; apply the setup again afterwards, which both remakes
+-- | the forces along the links and refuses such a link.
+relink
+  :: forall r
+   . Array { source :: Int, target :: Int }
+  -> WASMSim r
+  -> Effect Unit
+relink links sim = do
+  nodes <- Ref.read sim.nodesRef
+  Ref.write links sim.linksRef
+  setLinks sim.wasmSim nodes links
 
 -- | Give a Towards force new targets, by the name it has in the setup,
 -- | without re-applying the setup. Cheap enough to call every tick: one

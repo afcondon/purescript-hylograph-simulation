@@ -153,6 +153,30 @@ for (const [name, engine] of engines) {
     sim.free();
   }
 
+  // --- relink ---------------------------------------------------------------------
+  {
+    const line = () => [node(0, 0, 0), node(1, 100, 0), node(2, 200, 0), node(3, 300, 0)];
+    const springs = Setup.setupWithParams('l')([build(Setup.link('links'), Setup.withDistance(Setup.static(20)), Setup.withStrength(Setup.static(0.5)))])(params({ alphaDecay: 0.02 }));
+    const gap = (nodes, a, b) => Math.abs(nodes[b].x - nodes[a].x);
+    const sim = make(engine, springs, line(), [{ source: 0, target: 1 }]);
+    for (let t = 0; t < 30; t++) sim.step();
+    const linked = gap(sim.nodes(), 0, 1), free = gap(sim.nodes(), 2, 3);
+    const alphaBefore = sim.alpha(), ticksBefore = sim.tick(), nodesBefore = sim.nodes();
+    sim.relink([{ source: 2, target: 3 }])();
+    check(Object.is(sim.alpha(), alphaBefore) && sim.tick() === ticksBefore && same(sim.nodes(), nodesBefore) && sim.links().length === 1 && sim.links()[0].source === 2, `${name}: relink changes the links and nothing else (alpha still ${alphaBefore.toFixed(4)}, tick ${ticksBefore}, nodes where they were)`);
+    for (let t = 0; t < 30; t++) sim.step();
+    const nowFree = gap(sim.nodes(), 0, 1), nowLinked = gap(sim.nodes(), 2, 3);
+    check(linked < 60 && free === 100 && nowLinked < 60 && Math.abs(nowFree - linked) < 1e-3, `${name}: the spring is where the link is (0-1 drew in to ${linked.toFixed(1)} and then stayed; 2-3, free at ${free}, drew in to ${nowLinked.toFixed(1)})`);
+    let refused = false;
+    try { quietly(() => sim.relink([{ source: 0, target: 99 }])()); } catch (problem) { refused = /node not found: 99/.test(String(problem)); }
+    check(refused && sim.links().length === 1 && sim.links()[0].source === 2, `${name}: a link to a node that is not there is refused, and the links are left as they were`);
+    const kept = sim.snapshot();
+    sim.relink([])();
+    sim.restore(kept)();
+    check(sim.links().length === 1 && sim.links()[0].target === 3, `${name}: a snapshot carries the links it was taken with`);
+    sim.free();
+  }
+
   // --- applySetup takes every parameter ------------------------------------------
   {
     const none = (extra) => Setup.setupWithParams('none')([])(params(extra));
@@ -211,6 +235,17 @@ for (const [name, engine] of engines) {
   const c = make(engines[0][1], downhill(true), cloud(40), tree), d = make(engines[1][1], downhill(true), cloud(40), tree);
   const two = worst(c.step(), d.step());
   check(two < 1e-3, `hard directional: the engines agree after one tick to ${two.toExponential(1)}`);
+}
+
+{
+  const line = () => [node(0, 0, 0), node(1, 100, 0), node(2, 200, 0), node(3, 300, 0)];
+  const springs = Setup.setupWithParams('l')([build(Setup.link('links'), Setup.withDistance(Setup.static(20)), Setup.withStrength(Setup.static(0.5)))])(params());
+  const a = make(engines[0][1], springs, line(), [{ source: 0, target: 1 }]), b = make(engines[1][1], springs, line(), [{ source: 0, target: 1 }]);
+  for (let t = 0; t < 5; t++) { a.step(); b.step(); }
+  a.relink([{ source: 1, target: 2 }, { source: 2, target: 3 }])(); b.relink([{ source: 1, target: 2 }, { source: 2, target: 3 }])();
+  let apart = 0; for (let t = 0; t < 5; t++) apart = worst(a.step(), b.step());
+  check(apart < 1e-3 && Math.abs(a.alpha() - b.alpha()) < 1e-6, `relink: the engines agree five ticks after it to ${apart.toExponential(1)}, alpha ${a.alpha().toFixed(5)} and ${b.alpha().toFixed(5)}`);
+  a.free(); b.free();
 }
 
 console.log(failed === 0 ? '\nall passed' : `\n${failed} FAILED`);
